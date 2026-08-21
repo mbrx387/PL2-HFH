@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.env
+.venv/
+venv/
+*.egg-info/
+.DS_Store
+
+# Selbstsignierte Dev-Zertifikate nicht versionieren
+nginx/certs/*.pem
+nginx/certs/*.key
+nginx/certs/*.crt
