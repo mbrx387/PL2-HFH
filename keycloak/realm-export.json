@@ -1,0 +1,45 @@
+{
+  "realm": "hfh-pflege",
+  "enabled": true,
+  "displayName": "HFH Pflegezentren-Finder",
+  "sslRequired": "external",
+  "registrationAllowed": false,
+  "resetPasswordAllowed": true,
+  "clients": [
+    {
+      "clientId": "pflege-finder",
+      "name": "Pflegezentren-Finder",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": [
+        "https://localhost/auth/callback",
+        "http://localhost:8000/auth/callback"
+      ],
+      "webOrigins": ["+"],
+      "attributes": {
+        "post.logout.redirect.uris": "https://localhost/+##+http://localhost:8000/"
+      }
+    }
+  ],
+  "users": [
+    {
+      "username": "demo",
+      "enabled": true,
+      "email": "demo@example.org",
+      "emailVerified": true,
+      "firstName": "Demo",
+      "lastName": "Nutzer",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "demo1234",
+          "temporary": true
+        }
+      ]
+    }
+  ]
+}

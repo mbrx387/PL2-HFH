@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{{ app_name }}</title>
+  <link rel="stylesheet" href="/static/css/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-row">
+      <div>
+        <h1>{{ app_name }}</h1>
+        <p class="subtitle">Pflege- und Beratungsstellen in Deutschland finden und per E-Mail kontaktieren</p>
+      </div>
+      {% if user %}
+      <div class="user-info">
+        <span>Angemeldet als {{ user.name or user.email or user.sub }}</span>
+        <a href="/auth/logout">Abmelden</a>
+      </div>
+      {% endif %}
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="filters" aria-label="Filter">
+      <input
+        type="search"
+        id="search"
+        placeholder="Suche nach Name, Ort oder PLZ …"
+        aria-label="Suche"
+      />
+      <select id="bundesland-filter" aria-label="Bundesland filtern">
+        <option value="">Alle Bundesländer</option>
+      </select>
+      <select id="angebot-filter" aria-label="Angebot filtern">
+        <option value="">Alle Angebote</option>
+        <option value="pflegestuetzpunkt">Pflegestützpunkt</option>
+        <option value="pflegeberatung">Pflegeberatung</option>
+        <option value="wohnberatung">Wohnberatung</option>
+        <option value="demenzberatung">Demenzberatung</option>
+        <option value="angehoerigenberatung">Angehörigenberatung</option>
+        <option value="betreuungsberatung">Betreuungsberatung</option>
+      </select>
+    </section>
+
+    <section class="list-meta">
+      <span id="result-count">Lade Daten …</span>
+      <div class="list-actions">
+        <button id="select-all" type="button">Alle sichtbaren auswählen</button>
+        <button id="select-none" type="button">Auswahl leeren</button>
+      </div>
+    </section>
+
+    <section aria-label="Ergebnisliste">
+      <ul id="center-list" class="center-list"></ul>
+    </section>
+  </main>
+
+  <footer class="mail-bar">
+    <span><strong id="selected-count">0</strong> ausgewählt</span>
+    <button id="send-mail" type="button" disabled>
+      E-Mail an Auswahl senden (öffnet Ihr Mailprogramm)
+    </button>
+  </footer>
+
+  <script src="/static/js/app.js"></script>
+</body>
+</html>
