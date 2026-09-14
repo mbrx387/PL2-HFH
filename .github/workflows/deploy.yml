@@ -88,5 +88,16 @@ jobs:
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            sleep 5
-            curl -fsS https://localhost/healthz -k
+            for i in $(seq 1 12); do
+              if curl -fsS -k https://localhost/healthz > /dev/null; then
+                echo "Healthy."
+                exit 0
+              fi
+              echo "Not ready yet, retry $i/12..."
+              sleep 5
+            done
+            echo "Health check failed after 60s - dumping status/logs:"
+            cd /opt/pl2-hfh
+            docker compose ps
+            docker compose logs --tail=50
+            exit 1
