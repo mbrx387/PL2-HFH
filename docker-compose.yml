@@ -1,5 +1,6 @@
 services:
   app:
+    image: ghcr.io/mbrx387/pl2-hfh/app:latest
     build:
       context: .
       dockerfile: app/Dockerfile
