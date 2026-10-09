@@ -67,7 +67,7 @@ services:
       - internal
 
   keycloak:
-    image: quay.io/keycloak/keycloak:25.0.6
+    image: quay.io/keycloak/keycloak:26.8.0
     # KC_COMMAND: "start" (Produktion, Default) oder "start-dev" (lokal).
     # --import-realm liest beim ERSTEN Start keycloak/realm-export.json ein
     # (Realm + Client + Demo-User); existiert der Realm schon, wird uebersprungen.
