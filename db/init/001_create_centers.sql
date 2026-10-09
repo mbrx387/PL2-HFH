@@ -5,8 +5,8 @@
 --
 -- PostgreSQL im Docker-Image führt diese Datei nur beim erstmaligen
 -- Initialisieren eines leeren Datenbank-Volumes automatisch aus. Für spätere
--- Schemaänderungen bestehender Datenbanken sind Migrationen unter db/migrations
--- zu verwenden.
+-- Schemaänderungen bestehender Datenbanken sind separate Migrationen
+-- vorzusehen.
 --
 -- In centers entspricht id unserer stabilen unsere_id; zqp_id ist der
 -- externe Schlüssel für Datenabgleiche. bundesland enthält den zweistelligen
@@ -19,11 +19,11 @@ CREATE TABLE IF NOT EXISTS centers (
     id integer PRIMARY KEY,
     zqp_id varchar(32) UNIQUE,
     name text NOT NULL DEFAULT '',
-    adresse text NOT NULL DEFAULT '',
-    plz char(5) NOT NULL DEFAULT ''
+    bundesland char(2) NOT NULL DEFAULT '',
+        plz char(5) NOT NULL DEFAULT ''
         CHECK (btrim(plz) = '' OR btrim(plz) ~ '^[0-9]{5}$'),
     ort text NOT NULL DEFAULT '',
-    bundesland char(2) NOT NULL DEFAULT '',
+    adresse text NOT NULL DEFAULT '',
     email text NOT NULL DEFAULT '',
     telefon text NOT NULL DEFAULT '',
     website text NOT NULL DEFAULT '',
@@ -48,6 +48,9 @@ CREATE TABLE IF NOT EXISTS center_services (
     service_id integer NOT NULL REFERENCES services(id) ON DELETE CASCADE,
     PRIMARY KEY (center_id, service_id)
 );
+
+CREATE INDEX IF NOT EXISTS idx_center_services_service_id
+    ON center_services (service_id);
 
 INSERT INTO services (name)
 VALUES

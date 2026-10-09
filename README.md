@@ -54,7 +54,6 @@ PL2-HFH/
 ├── keycloak/realm-export.json    # Realm/Client/Demo-User, automatischer Import (URLs aus APP_PUBLIC_URL)
 ├── db/
 │   ├── init/001_create_centers.sql          # Grundschema für eine neue PostgreSQL-Datenbank
-│   └── migrations/002_normalize_center_services.sql # Angebote normalisieren
 ├── nginx/
 │   ├── nginx.conf
 │   └── conf.d/default.conf       # TLS-Terminierung, Reverse Proxy, Rate-Limit, /idp/-Route (Keycloak)
@@ -88,17 +87,13 @@ Der Compose-Service `app-db` stellt lokal eine persistente PostgreSQL-Datenbank
 bereit. Das Schema besteht aus `centers` (Stammdaten), `services`
 (Angebotskatalog) und `center_services` (Zuordnung). Die Angebotsdaten liegen
 nicht mehr als einzelne Boolean-Spalten oder Freitext in `centers`.
+Details zu Tabellen, Index, Init-Skript und CSV-Import stehen in der
+[Dokumentation des PostgreSQL-Schemas](docs/DATENBANKSCHEMA.md).
 
 `db/init/001_create_centers.sql` wird vom PostgreSQL-Image nur beim ersten
-Initialisieren eines leeren Datenbank-Volumes automatisch ausgeführt. Für ein
-bereits angelegtes Volume gibt es die einmalig anzuwendende Migration
-`db/migrations/002_normalize_center_services.sql`. Sie überträgt die alten
-Angebotsfelder in Katalog und Zuordnung, bevor sie die alten Spalten entfernt:
-
-```sh
-docker compose exec -T app-db psql -v ON_ERROR_STOP=1 -U pl2 -d pflegedb \
-  < db/migrations/002_normalize_center_services.sql
-```
+Initialisieren eines leeren Datenbank-Volumes automatisch ausgeführt. Die
+Beispieldaten importierst du danach manuell aus der CSV-Datei; die Befehle
+stehen in der verlinkten Schema-Dokumentation.
 
 Die Anwendung verwendet derzeit weiterhin die SQLite-In-Memory-Datenbank und
 lädt ihre Demo-Daten aus der CSV-Datei. Eine Verbindung von App zu PostgreSQL
