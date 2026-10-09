@@ -1,10 +1,8 @@
 """Leichte Security-Middleware auf Anwendungsebene.
 
-Das hier ersetzt KEIN Login/SSO (das kommt als naechster Schritt via
-Keycloak/OIDC, siehe README) - es sind Basis-Haertungsmassnahmen, die
-unabhaengig vom Auth-Konzept sinnvoll sind und schon jetzt nichts kosten.
-TLS-Terminierung selbst passiert bewusst NICHT hier, sondern eine Ebene
-davor im Nginx-Reverse-Proxy (siehe nginx/conf.d/default.conf).
+Ergaenzt das Login/SSO (app/auth.py) um Basis-Haertungsmassnahmen, die
+unabhaengig vom Auth-Konzept sinnvoll sind. TLS-Terminierung passiert
+bewusst NICHT hier, sondern im Nginx-Reverse-Proxy (nginx/conf.d/default.conf).
 """
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
@@ -19,7 +17,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers.setdefault("Permissions-Policy", "geolocation=(), camera=(), microphone=()")
         response.headers.setdefault(
             "Content-Security-Policy",
-            "default-src 'self'; style-src 'self' 'unsafe-inline'; "
-            "script-src 'self'; img-src 'self' data:; connect-src 'self'",
+            "default-src 'self'; style-src 'self'; script-src 'self'; "
+            "img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'",
         )
         return response

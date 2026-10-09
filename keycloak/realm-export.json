@@ -16,12 +16,11 @@
       "directAccessGrantsEnabled": false,
       "serviceAccountsEnabled": false,
       "redirectUris": [
-        "https://localhost/auth/callback",
-        "http://localhost:8000/auth/callback"
+        "${APP_PUBLIC_URL}/auth/callback"
       ],
-      "webOrigins": ["+"],
+      "webOrigins": ["${APP_PUBLIC_URL}"],
       "attributes": {
-        "post.logout.redirect.uris": "https://localhost/+##+http://localhost:8000/"
+        "post.logout.redirect.uris": "${APP_PUBLIC_URL}/"
       }
     }
   ],

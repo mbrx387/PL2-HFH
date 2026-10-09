@@ -12,7 +12,7 @@ App-Container im internen Docker-Netzwerk NUR von nginx erreichbar ist
 (kein Host-Port-Mapping, siehe docker-compose.yml) - es gibt also keinen Weg,
 diese Header von aussen zu faelschen, ohne bereits im Docker-Netz zu sein.
 """
-from uvicorn.workers import UvicornWorker
+from uvicorn_worker import UvicornWorker
 
 
 class ProxyHeadersUvicornWorker(UvicornWorker):

@@ -1,0 +1,93 @@
+# Dependabot prueft alle Abhaengigkeiten des Repos auf Updates und oeffnet PRs.
+# Der Dependency Graph (Settings -> Security -> Dependency graph) liest dieselben
+# Manifest-Dateien automatisch ein:
+#   app/requirements.txt, requirements-dev.txt  -> Python-Pakete
+#   app/Dockerfile                               -> Basis-Image python:3.12-slim
+#   docker-compose.yml                           -> nginx, keycloak, postgres
+#   .github/workflows/*.yml                      -> GitHub Actions
+# Security-Updates (Dependabot Alerts) muessen zusaetzlich in den Repo-Settings
+# aktiviert sein; sie nutzen diese Datei fuer Labels/Reviewer.
+version: 2
+updates:
+  # --- Python: Laufzeit-Abhaengigkeiten der App ---
+  - package-ecosystem: pip
+    directory: /app
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Berlin
+    open-pull-requests-limit: 10
+    labels: [dependencies, python]
+    commit-message:
+      prefix: "deps(app)"
+    groups:
+      # Minor/Patch-Updates gebuendelt in einem PR; Major einzeln (Breaking Changes).
+      python-minor-patch:
+        update-types: [minor, patch]
+
+  # --- Python: Dev-/Test-Tooling (pytest, ruff) ---
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Berlin
+    open-pull-requests-limit: 5
+    labels: [dependencies, python, dev-tooling]
+    commit-message:
+      prefix: "deps(dev)"
+    groups:
+      dev-tooling:
+        patterns: ["*"]
+
+  # --- GitHub Actions in .github/workflows ---
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Berlin
+    open-pull-requests-limit: 5
+    labels: [dependencies, ci]
+    commit-message:
+      prefix: "deps(ci)"
+    groups:
+      github-actions:
+        patterns: ["*"]
+
+  # --- Docker: Basis-Image im App-Dockerfile ---
+  - package-ecosystem: docker
+    directory: /app
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Berlin
+    open-pull-requests-limit: 5
+    labels: [dependencies, docker]
+    commit-message:
+      prefix: "deps(docker)"
+
+  # --- Docker Compose: nginx, keycloak, postgres ---
+  - package-ecosystem: docker-compose
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Berlin
+    open-pull-requests-limit: 5
+    labels: [dependencies, docker]
+    commit-message:
+      prefix: "deps(compose)"
+    ignore:
+      # Keycloak-Major-Upgrades brauchen eine Migration (Realm/DB) und werden
+      # bewusst manuell geplant; Minor/Patch kommen weiterhin per PR.
+      - dependency-name: quay.io/keycloak/keycloak
+        update-types: ["version-update:semver-major"]
+      # Postgres-Major wechselt das Datenformat des Volumes (pg_upgrade noetig).
+      - dependency-name: postgres
+        update-types: ["version-update:semver-major"]

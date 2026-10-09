@@ -8,6 +8,14 @@ from functools import lru_cache
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# Werte, die erkennbar nur Platzhalter aus .env.example/config.py sind.
+PLACEHOLDER_VALUES = {"", "change-me", "insecure-dev-secret-change-me"}
+MIN_SECRET_KEY_LENGTH = 32
+
+
+def is_placeholder(value: str | None) -> bool:
+    return (value or "").strip() in PLACEHOLDER_VALUES
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
@@ -60,8 +68,14 @@ class Settings(BaseSettings):
         return self.environment.lower() == "production"
 
     @property
+    def secret_key_is_weak(self) -> bool:
+        return is_placeholder(self.secret_key) or len(self.secret_key) < MIN_SECRET_KEY_LENGTH
+
+    @property
     def oidc_configured(self) -> bool:
-        return bool(self.oidc_issuer and self.oidc_client_id and self.oidc_client_secret)
+        return not any(
+            is_placeholder(v) for v in (self.oidc_issuer, self.oidc_client_id, self.oidc_client_secret)
+        )
 
 
 @lru_cache

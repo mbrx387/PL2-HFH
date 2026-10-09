@@ -1,0 +1,4 @@
+unsere_id;zqp_id;name;adresse;plz;ort;bundesland;email;telefon;website;latitude;longitude;pflegestuetzpunkt;pflegeberatung;wohnberatung;demenzberatung;angehoerigenberatung;betreuungsberatung;leistungen;updated_at
+10;a;Beratungsstelle Dresden;Am See 11;01067;Dresden;SN;dresden@example.org;0351;https://example.org;51.0;13.7;0;1;0;0;1;0;Pflegeberatung;2026-01-01 00:00:00
+20;b;Pflegestützpunkt Leipzig;Markt 1;04109;Leipzig;SN;;0341;;51.3;12.4;1;0;0;0;0;0;Pflegestützpunkt;2026-01-01 00:00:00
+30;c;Demenzberatung München;Platz 100%;80331;München;BY;muenchen@example.org;089;;48.1;11.6;0;0;0;1;0;0;Demenzberatung;2026-01-01 00:00:00

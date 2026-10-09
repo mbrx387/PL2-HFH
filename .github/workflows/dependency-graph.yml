@@ -1,0 +1,35 @@
+# Reicht alle erkannten Abhaengigkeiten (Python, Dockerfile-Basis-Images,
+# Actions) per Dependency Submission API in den GitHub Dependency Graph ein.
+# Noetig, weil der Graph Docker-Images nicht von sich aus liest - so sind sie
+# unter Insights -> Dependency graph sichtbar und erhalten Dependabot Alerts.
+name: Dependency Graph
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "0 5 * * 1" # montags, vor dem Dependabot-Lauf
+  workflow_dispatch:
+
+permissions:
+  contents: write # fuer das Einreichen des Snapshots
+  id-token: write
+
+jobs:
+  submit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Detect & submit dependencies
+        uses: advanced-security/component-detection-dependency-submission-action@v0.2.0
+        with:
+          filePath: .
+          directoryExclusionList: .venv,tests
+          # Pip- und Dockerfile-Detector sind "DefaultOff" und muessen explizit
+          # aktiviert werden; so landen Python-Pakete (inkl. transitiver) UND
+          # Docker-Basis-Images im Graph.
+          detectorArgs: Pip=EnableIfDefaultOff,SimplePip=EnableIfDefaultOff,Dockerfile=EnableIfDefaultOff
+          correlator: pl2-hfh

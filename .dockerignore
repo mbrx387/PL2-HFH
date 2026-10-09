@@ -9,3 +9,7 @@ venv
 nginx
 scripts
 docs
+tests
+.github
+pyproject.toml
+requirements-dev.txt

@@ -89,34 +89,26 @@ mehrere reale Bugs gefunden und gefixt - Details siehe Git-Historie:
   "localhost" als sich selbst. Fix: separate interne Endpunkt-URLs in
   `app/auth.py`, siehe `OIDC_ISSUER_INTERNAL`.
 
-**B) Produktivbetrieb auf dem Ubuntu-Server**
+**B) Produktivbetrieb auf dem Ubuntu-Server — ✅ in `docker-compose.yml` umgesetzt**
 
-Der aktuelle Compose-Service nutzt bewusst den einfachen Entwicklungsmodus
-(`start-dev`, eingebaute H2-Datenbank, kein eigenes TLS). Für den echten
-Betrieb vor dem Going-Live zusätzlich:
+Der Compose-Service läuft standardmäßig produktionsnah: eigene Postgres-DB
+(`keycloak-db`, persistentes Volume), `start` statt `start-dev`
+(`KC_COMMAND`), `KC_PROXY_HEADERS=xforwarded`, Hostname und Redirect-URIs
+kommen aus `.env` (`KC_HOSTNAME`, `APP_PUBLIC_URL` – letztere wird per
+`${…}`-Platzhalter in `keycloak/realm-export.json` eingesetzt). Vor dem
+Going-Live bleibt:
 
-1. **Eigene Postgres-Datenbank** statt der eingebauten H2-DB: einen
-   `keycloak-db`-Service (`postgres:16-alpine`) ergänzen, Keycloak über
-   `KC_DB=postgres`, `KC_DB_URL`, `KC_DB_USERNAME`, `KC_DB_PASSWORD`
-   anbinden. Grund: H2 ist nicht für Mehrbenutzer-/Dauerbetrieb gedacht und
-   büßt Konsistenzgarantien ein.
-2. **`start` statt `start-dev`** im `command:` – der Dev-Modus deaktiviert
-   u.a. Cache-Optimierungen und toleriert absichtlich unsichere
-   Konfigurationen.
-3. **`KC_HOSTNAME`** auf die echte Domain setzen (z.B.
-   `KC_HOSTNAME=pflege-finder.example.org`), damit Keycloak in Tokens/
-   Redirects nicht `localhost` ausgibt.
-4. **Redirect-URIs im Client** (`keycloak/realm-export.json` oder direkt in
-   der Admin-Konsole) auf die echte Domain anpassen, `http://localhost:*`
-   -Einträge danach entfernen.
-5. Den direkten Port 8080 idealerweise ganz von `docker-compose.yml`
+1. **Demo-User `demo` entfernen** (Admin-Konsole → Users) – er wird beim
+   Erst-Import mit angelegt; das Passwort ist zwar „temporary“, der Account
+   gehört aber nicht auf einen öffentlichen Server.
+2. Den direkten Port 8080 idealerweise ganz von `docker-compose.yml`
    entfernen, sobald der Zugriff über `https://<host>/idp/` (nginx)
    bestätigt funktioniert – dann ist die Admin-Konsole nur noch per
    SSH-Tunnel erreichbar, nicht mehr per lokal gemapptem Port.
-6. Zertifikat: läuft automatisch über die gleiche TLS-Terminierung wie die
+3. Zertifikat: läuft automatisch über die gleiche TLS-Terminierung wie die
    App (nginx + Let's Encrypt, siehe README Abschnitt 5) – Keycloak selbst
-   muss dafür kein eigenes Zertifikat halten (`KC_PROXY=edge` ist dafür
-   bereits gesetzt).
+   muss dafür kein eigenes Zertifikat halten.
+4. Backup der Keycloak-DB (`pg_dump` auf `keycloak-db`), siehe Abschnitt 5.
 
 **Optional statt eigenem Realm/Usern:** falls die Hochschule bereits einen
 zentralen Identity-Provider hat (z.B. Shibboleth/SAML, Azure AD, oder ein
@@ -156,12 +148,10 @@ Realisiert in `app/auth.py` (mit `authlib`) + `app/main.py`:
 - **Rollen/Rechte**: aktuell hat jeder erfolgreiche Login vollen Zugriff.
   Falls nötig, über Keycloak-Realm-Rollen + eine zusätzliche Prüfung in
   `LoginRequiredMiddleware` (Claim im ID-Token) nachrüsten.
-- **Produktivhärtung von Keycloak selbst**: siehe 1.1 B (eigene Postgres-DB,
-  `start` statt `start-dev`, echter Hostname).
-- **Redirect-URIs in `keycloak/realm-export.json`** auf die echte Domain
-  anpassen, `localhost`-Einträge danach entfernen (siehe 1.1 B, Punkt 4).
-- **Tests**: bisher nur manuell (End-to-End über echte Container) verifiziert,
-  kein automatisierter Test für den Login-Flow – siehe Abschnitt 5.
+- **Demo-User entfernen** und Port 8080 schließen, siehe 1.1 B.
+- **Login-Flow-Test**: Middleware, Redirects und Fail-Fast-Checks sind per
+  Pytest abgedeckt (`tests/test_auth.py`); der eigentliche Token-Tausch mit
+  Keycloak nur manuell End-to-End.
 
 ## 2. Von SQLite (In-Memory) zu einer persistenten Datenbank
 
@@ -186,9 +176,14 @@ Server sind Voraussetzung.
 
 ## 5. Weitere sinnvolle Ausbaustufen
 
-- Automatisierte Tests (Pytest für die API, ggf. Playwright für die UI).
-- CI/CD-Pipeline (z.B. GitHub Actions): Lint + Tests + Docker-Build bei jedem
-  Push, Deploy auf den Ubuntu-Server bei Merge nach `main`.
+- ✅ Automatisierte Tests (Pytest) + Lint (ruff) als CI-Gate vor Build/Deploy;
+  Dependabot für pip/Actions/Docker. Offen: Playwright für die UI.
+- ✅ Deploy mit Commit-SHA-Tag statt `latest` (Rollback = `IMAGE_TAG` in
+  `.env` zurücksetzen).
+- `appleboy/ssh-action` und übrige Actions auf Commit-SHAs pinnen
+  (Supply-Chain).
+- Impressum und Datenschutzerklärung (für eine öffentliche Website mit Login
+  in Deutschland verpflichtend).
 - Strukturiertes Logging + einfaches Monitoring (z.B. Healthcheck-Uptime via
   Uptime Kuma, ebenfalls leicht per Docker Compose zu ergänzen).
 - Kartenansicht der Zentren (Geokoordinaten sind bereits im Datensatz

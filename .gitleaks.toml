@@ -1,0 +1,22 @@
+# Gitleaks-Konfiguration (Pre-Commit-Hook). Erbt alle Standardregeln und
+# ergaenzt nur dokumentierte False Positives.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Bekannte False Positives"
+# Standard ist regexTarget = "secret" (nur der extrahierte Teil, hier
+# "5432/keycloak"); "line" prueft die ganze Zeile.
+regexTarget = "line"
+regexes = [
+  # JDBC-URL ohne Credentials (Host/Port/DB-Name); das Passwort kommt separat
+  # ueber KC_DB_PASSWORD aus .env.
+  '''jdbc:postgresql://keycloak-db:5432/keycloak''',
+  # Platzhalter in der Vorlage, keine echten Werte.
+  '''change-me''',
+]
+paths = [
+  # Vorlage ohne echte Werte; Demo-User-Passwort im Realm-Import ist
+  # dokumentiert und "temporary".
+  '''\.env\.example$''',
+]

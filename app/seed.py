@@ -8,6 +8,7 @@ import csv
 import logging
 from pathlib import Path
 
+from sqlalchemy import delete
 from sqlalchemy.orm import Session
 
 from app.models import Center
@@ -30,11 +31,21 @@ def _to_float(value: str | None) -> float | None:
         return None
 
 
+def _to_int(value: str | None) -> int | None:
+    try:
+        return int((value or "").strip())
+    except ValueError:
+        return None
+
+
 def load_centers_from_csv(db: Session, csv_path: str) -> int:
     path = Path(csv_path)
     if not path.exists():
         logger.warning("Seed-Datei %s nicht gefunden - Datenbank bleibt leer.", path)
         return 0
+
+    # Idempotent: erlaubt erneutes Seeden (z.B. in Tests) ohne Duplikate.
+    db.execute(delete(Center))
 
     inserted = 0
     with path.open(newline="", encoding="utf-8-sig") as f:
@@ -42,6 +53,8 @@ def load_centers_from_csv(db: Session, csv_path: str) -> int:
         for row in reader:
             db.add(
                 Center(
+                    # Stabile ID aus der CSV, damit Auswahl/Links nicht von der Zeilenreihenfolge abhaengen.
+                    id=_to_int(row.get("unsere_id")),
                     name=(row.get("name") or "").strip(),
                     adresse=(row.get("adresse") or "").strip(),
                     plz=(row.get("plz") or "").strip(),

@@ -25,8 +25,6 @@ settings = get_settings()
 logging.basicConfig(level=settings.log_level.upper())
 logger = logging.getLogger("app")
 
-DEFAULT_SECRET_KEY = "insecure-dev-secret-change-me"
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -43,9 +41,9 @@ async def lifespan(app: FastAPI):
             "App neu starten - oder fuer lokale Entwicklung ohne Login AUTH_ENABLED=false "
             "setzen (NICHT fuer den Produktivbetrieb)."
         )
-    if settings.is_production and settings.secret_key == DEFAULT_SECRET_KEY:
+    if settings.is_production and settings.secret_key_is_weak:
         raise RuntimeError(
-            "SECRET_KEY wurde nicht ueberschrieben (Default-Wert aus dem Code) - das darf im "
+            "SECRET_KEY ist ein Platzhalter oder kuerzer als 32 Zeichen - das darf im "
             "Produktivbetrieb nicht passieren, da sich sonst Session-Cookies faelschen "
             "liessen. Bitte in .env einen zufaelligen Wert setzen, z.B. "
             "'openssl rand -base64 32'."
@@ -70,7 +68,10 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title=settings.app_name,
-    description="Findet Pflege-/Beratungsstellen in Deutschland und erlaubt den Versand einer Sammel-Mail ueber die Standard-Mailbox der Nutzer:innen.",
+    description=(
+        "Findet Pflege-/Beratungsstellen in Deutschland und erlaubt den Versand einer "
+        "Sammel-Mail ueber die Standard-Mailbox der Nutzer:innen."
+    ),
     version="0.1.0",
     docs_url="/api/docs",
     openapi_url="/api/openapi.json",

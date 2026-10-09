@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PL2-HFH – Das Projekt einfach erklärt</title>
+  <style>
+    :root {
+      --bg: #f7f8fa;
+      --card: #ffffff;
+      --text: #1f2933;
+      --muted: #52606d;
+      --accent: #1f6feb;
+      --ok: #1a7f37;
+      --warn: #b35c00;
+      --bad: #c62828;
+      --border: #e1e5ea;
+      --code: #f0f3f6;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      line-height: 1.6;
+      color: var(--text);
+      background: var(--bg);
+    }
+    header {
+      background: linear-gradient(135deg, #1f6feb, #0b3d91);
+      color: #fff;
+      padding: 2.5rem 1.5rem;
+    }
+    header h1 { margin: 0 0 .5rem; font-size: 2rem; }
+    header p { margin: 0; opacity: .9; max-width: 60rem; }
+    .wrap { max-width: 60rem; margin: 0 auto; padding: 1.5rem; }
+    nav.toc {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1rem 1.5rem;
+      margin-bottom: 2rem;
+    }
+    nav.toc ol { margin: .5rem 0 0; padding-left: 1.2rem; columns: 2; }
+    nav.toc a { color: var(--accent); text-decoration: none; }
+    nav.toc a:hover { text-decoration: underline; }
+    section {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1.5rem;
+      margin-bottom: 2rem;
+    }
+    h2 { margin-top: 0; border-bottom: 2px solid var(--accent); padding-bottom: .3rem; }
+    h3 { margin-bottom: .3rem; color: #0b3d91; }
+    .box {
+      border-left: 4px solid var(--accent);
+      background: #eef4ff;
+      padding: .8rem 1rem;
+      border-radius: 6px;
+      margin: 1rem 0;
+    }
+    .box.why { border-color: var(--ok); background: #eef8f0; }
+    .box.warn { border-color: var(--warn); background: #fff6e8; }
+    .box strong:first-child { display: block; margin-bottom: .2rem; }
+    code, pre {
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+      font-size: .9em;
+    }
+    code { background: var(--code); padding: .1rem .35rem; border-radius: 4px; }
+    pre {
+      background: #1e2530;
+      color: #e6edf3;
+      padding: 1rem;
+      border-radius: 8px;
+      overflow-x: auto;
+    }
+    pre code { background: none; padding: 0; color: inherit; }
+    table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
+    th, td { border: 1px solid var(--border); padding: .6rem .8rem; text-align: left; vertical-align: top; }
+    th { background: var(--code); }
+    .glossar dt { font-weight: 600; margin-top: .8rem; }
+    .glossar dd { margin-left: 0; color: var(--muted); }
+    .diagram {
+      font-family: monospace;
+      white-space: pre;
+      background: var(--code);
+      padding: 1rem;
+      border-radius: 8px;
+      overflow-x: auto;
+      line-height: 1.35;
+    }
+    .badge {
+      display: inline-block;
+      font-size: .75rem;
+      padding: .1rem .5rem;
+      border-radius: 999px;
+      color: #fff;
+      vertical-align: middle;
+      margin-left: .4rem;
+    }
+    .badge.new { background: var(--ok); }
+    .badge.fix { background: var(--warn); }
+    .badge.sec { background: var(--bad); }
+    footer { text-align: center; color: var(--muted); padding: 2rem 1rem; font-size: .9rem; }
+    details { margin: .6rem 0; }
+    summary { cursor: pointer; font-weight: 600; color: var(--accent); }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>PL2-HFH – Pflegezentren-Finder</h1>
+  <p>
+    Dieses Dokument erklärt für absolute Einsteiger:innen, <strong>was</strong> in diesem
+    Projekt gebaut wurde, <strong>wie</strong> es technisch funktioniert und
+    <strong>warum</strong> die einzelnen Entscheidungen so getroffen wurden – inklusive der
+    zuletzt vorgenommenen Verbesserungen.
+  </p>
+</header>
+
+<div class="wrap">
+
+  <nav class="toc">
+    <strong>Inhalt</strong>
+    <ol>
+      <li><a href="#was">Was macht die Anwendung?</a></li>
+      <li><a href="#bausteine">Die Bausteine im Überblick</a></li>
+      <li><a href="#ablauf">Was passiert bei einem Seitenaufruf?</a></li>
+      <li><a href="#ordner">Wo liegt welcher Code?</a></li>
+      <li><a href="#sicherheit">Sicherheit – einfach erklärt</a></li>
+      <li><a href="#verbesserungen">Die letzten Verbesserungen</a></li>
+      <li><a href="#deploy">Vom Code zum laufenden Server</a></li>
+      <li><a href="#start">Selbst ausprobieren</a></li>
+      <li><a href="#glossar">Glossar</a></li>
+    </ol>
+  </nav>
+
+  <!-- ============================================================ -->
+  <section id="was">
+    <h2>1. Was macht die Anwendung?</h2>
+    <p>
+      Die Website zeigt eine Liste von rund <strong>4.000 Pflege- und Beratungsstellen</strong>
+      in Deutschland. Man kann die Liste durchsuchen (Name, Ort, PLZ), nach Bundesland und
+      Angebotsart filtern und beliebig viele Stellen per Checkbox auswählen. Ein Klick auf
+      „E-Mail an Auswahl senden“ öffnet das <em>eigene</em> Mailprogramm (Outlook, Apple Mail …)
+      mit allen gewählten Adressen bereits eingetragen.
+    </p>
+    <div class="box why">
+      <strong>Warum öffnet sich das eigene Mailprogramm statt dass der Server die Mail verschickt?</strong>
+      Weil der Server dann <em>keine</em> Mail-Zugangsdaten braucht, keine E-Mails speichert und
+      nicht als Spam-Schleuder missbraucht werden kann. Technisch ist das ein ganz normaler
+      <code>mailto:</code>-Link – wie ein Link, der aber nicht eine Seite, sondern das
+      Mailprogramm öffnet.
+    </div>
+    <p>
+      Außerdem gibt es eine <strong>Login-Pflicht</strong>: Niemand sieht die Liste, ohne sich
+      vorher angemeldet zu haben.
+    </p>
+  </section>
+
+  <!-- ============================================================ -->
+  <section id="bausteine">
+    <h2>2. Die Bausteine im Überblick</h2>
+    <p>Die Anwendung besteht aus mehreren Programmen, die zusammenarbeiten. Jedes läuft in einem
+      eigenen <strong>Container</strong> (siehe Glossar) auf ein und demselben Server:</p>
+
+    <div class="diagram">Internet (Browser der Nutzer:innen)
+        │  verschlüsselt (https, Port 443)
+        ▼
+┌─────────────────────────────────────────────────────────┐
+│  Ubuntu-Server                                           │
+│                                                          │
+│   ┌───────────┐          ┌──────────────────────────┐    │
+│   │   nginx   │ ───────► │  App (FastAPI / Python)  │    │
+│   │ "Türsteher"│          │  + Datenbank im RAM      │    │
+│   └───────────┘          └──────────────────────────┘    │
+│         │                                                │
+│         │ /idp/…         ┌──────────────┐  ┌──────────┐  │
+│         └──────────────► │   Keycloak   │─►│ Postgres │  │
+│                          │  (Login)     │  │ (für KC) │  │
+│                          └──────────────┘  └──────────┘  │
+│                                                          │
+│   internes Docker-Netzwerk – von außen nicht erreichbar  │
+└─────────────────────────────────────────────────────────┘</div>
+
+    <table>
+      <tr><th>Baustein</th><th>Was er tut</th><th>Warum genau dieser?</th></tr>
+      <tr>
+        <td><strong>nginx</strong></td>
+        <td>Der einzige Baustein, der aus dem Internet erreichbar ist. Entschlüsselt HTTPS,
+          leitet Anfragen an die App bzw. an Keycloak weiter, bremst zu viele Anfragen pro
+          Sekunde aus (Rate-Limiting).</td>
+        <td>Weltweit bewährter Standard-„Türsteher“. Alles Sicherheitsrelevante an der
+          Außengrenze passiert an genau einer Stelle.</td>
+      </tr>
+      <tr>
+        <td><strong>App</strong> (Python, FastAPI)</td>
+        <td>Liefert die Webseite aus und beantwortet die Datenabfragen
+          (<code>/api/centers</code>). Lädt beim Start die CSV-Datei in eine kleine
+          Datenbank im Arbeitsspeicher.</td>
+        <td>Python ist einsteigerfreundlich; FastAPI ist klein, schnell und erzeugt die
+          API-Dokumentation automatisch (<code>/api/docs</code>).</td>
+      </tr>
+      <tr>
+        <td><strong>Keycloak</strong></td>
+        <td>Übernimmt den kompletten Login: Benutzerkonten, Passwörter, Passwort-vergessen,
+          Schutz vor Rate-Angriffen.</td>
+        <td>Login selbst zu programmieren ist fehleranfällig. Keycloak ist eine
+          Open-Source-Standardlösung, die genau das seit Jahren macht.</td>
+      </tr>
+      <tr>
+        <td><strong>Postgres</strong> (nur für Keycloak)</td>
+        <td>Speichert Keycloaks Benutzerkonten dauerhaft auf der Festplatte.</td>
+        <td>Ohne echte Datenbank würde Keycloak alle Konten bei jedem Neustart vergessen.</td>
+      </tr>
+    </table>
+
+    <div class="box">
+      <strong>Warum liegt die Datenbank der App „nur im Arbeitsspeicher“?</strong>
+      Die Stellen-Daten ändern sich nicht durch die Nutzer:innen. Die
+      <strong>CSV-Datei im Repository</strong> ist die „Wahrheit“; beim Start wird sie in eine
+      SQLite-Datenbank im RAM geladen. Vorteil: kein Datenbank-Server nötig, trotzdem echtes
+      SQL zum Filtern/Suchen. Startet der Container neu, wird einfach alles frisch geladen –
+      es kann nichts verloren gehen.
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <section id="ablauf">
+    <h2>3. Was passiert bei einem Seitenaufruf?</h2>
+    <ol>
+      <li>Du tippst <code>https://pflege-finder.example.org</code> ein. Die Anfrage landet bei
+        <strong>nginx</strong>, der die Verschlüsselung aufmacht.</li>
+      <li>nginx reicht die Anfrage intern an die <strong>App</strong> weiter.</li>
+      <li>Die App prüft: <em>Bist du eingeloggt?</em> (Dafür schaut sie in ein signiertes
+        Cookie.) Falls nein → Weiterleitung zu <code>/auth/login</code> → weiter zu
+        <strong>Keycloak</strong>.</li>
+      <li>Du meldest dich bei Keycloak an. Keycloak schickt dich mit einem Einmal-Code zurück
+        zur App (<code>/auth/callback</code>).</li>
+      <li>Die App tauscht diesen Code <em>direkt</em> (Server zu Server, im internen Netz)
+        gegen deine Benutzerinfos ein und merkt sich „eingeloggt“ im Cookie.</li>
+      <li>Jetzt bekommst du die Seite. Das JavaScript im Browser lädt die Liste über
+        <code>/api/centers?…</code> nach, du filterst, wählst aus, klickst auf „E-Mail senden“
+        → <code>mailto:</code> öffnet dein Mailprogramm.</li>
+    </ol>
+    <div class="box">
+      <strong>Warum zwei verschiedene Adressen für Keycloak (<code>OIDC_ISSUER</code> und
+        <code>OIDC_ISSUER_INTERNAL</code>)?</strong>
+      Dein Browser erreicht Keycloak nur über die öffentliche Adresse
+      (<code>https://…/idp/</code>). Die App dagegen spricht mit Keycloak direkt im
+      Container-Netz (<code>http://keycloak:8080/…</code>) – schneller und ohne Umweg über
+      nginx. Beides zeigt auf dasselbe Keycloak, nur über unterschiedliche „Türen“.
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <section id="ordner">
+    <h2>4. Wo liegt welcher Code?</h2>
+    <table>
+      <tr><th>Datei / Ordner</th><th>Inhalt in einem Satz</th></tr>
+      <tr><td><code>app/main.py</code></td><td>Startpunkt: baut die App zusammen, lädt die CSV, prüft beim Start, ob die Konfiguration sicher ist.</td></tr>
+      <tr><td><code>app/config.py</code></td><td>Liest alle Einstellungen aus der <code>.env</code>-Datei (Umgebungsvariablen).</td></tr>
+      <tr><td><code>app/auth.py</code></td><td>Login/Logout mit Keycloak und der „Türsteher“ (Middleware), der nicht eingeloggte Besucher:innen zum Login schickt.</td></tr>
+      <tr><td><code>app/security.py</code></td><td>Setzt Sicherheits-Header auf jede Antwort (siehe Abschnitt 5).</td></tr>
+      <tr><td><code>app/routers/centers.py</code></td><td>Die Daten-Schnittstelle: <code>/api/centers</code> (Liste mit Filtern) und <code>/api/bundeslaender</code>.</td></tr>
+      <tr><td><code>app/models.py</code>, <code>app/database.py</code></td><td>Wie eine „Stelle“ in der Datenbank aussieht und wie die RAM-Datenbank angelegt wird.</td></tr>
+      <tr><td><code>app/seed.py</code></td><td>Liest <code>app/data/pflegestellen.csv</code> und schreibt sie in die Datenbank.</td></tr>
+      <tr><td><code>app/templates/index.html</code>, <code>app/static/</code></td><td>Die Webseite selbst: HTML, CSS und das JavaScript für Liste, Filter und den mailto-Link.</td></tr>
+      <tr><td><code>app/Dockerfile</code></td><td>Bauanleitung für den App-Container (welches Python, welche Pakete, wie starten).</td></tr>
+      <tr><td><code>docker-compose.yml</code></td><td>Der „Bauplan“ aller Container zusammen: App, nginx, Keycloak, Postgres, Netzwerk.</td></tr>
+      <tr><td><code>nginx/</code></td><td>Konfiguration des Türstehers: HTTPS, Weiterleitung, Rate-Limit.</td></tr>
+      <tr><td><code>keycloak/realm-export.json</code></td><td>Vorlage, mit der Keycloak beim ersten Start automatisch Realm, Client und einen Demo-User anlegt.</td></tr>
+      <tr><td><code>tests/</code></td><td>Automatische Tests, die prüfen, ob API und Login-Schutz funktionieren.</td></tr>
+      <tr><td><code>.github/workflows/deploy.yml</code></td><td>Die Automatik: bei jedem Push testen, bauen, auf den Server ausrollen.</td></tr>
+      <tr><td><code>.env.example</code></td><td>Vorlage für die eigene <code>.env</code>-Datei mit allen Einstellungen und Passwörtern (die echte <code>.env</code> wird nie eingecheckt).</td></tr>
+    </table>
+  </section>
+
+  <!-- ============================================================ -->
+  <section id="sicherheit">
+    <h2>5. Sicherheit – einfach erklärt</h2>
+    <h3>HTTPS</h3>
+    <p>Alles zwischen Browser und Server ist verschlüsselt. Unverschlüsselte Aufrufe
+      (<code>http://</code>) werden automatisch auf <code>https://</code> umgeleitet.</p>
+
+    <h3>Login über Keycloak – „sicher von Haus aus“</h3>
+    <p>Die Login-Pflicht ist standardmäßig <strong>an</strong>. Fehlen die Keycloak-Zugangsdaten,
+      startet die App <em>absichtlich gar nicht</em> („Fail-fast“) – lieber ein sichtbarer Fehler
+      als eine versehentlich offene Website.</p>
+
+    <h3>Sicherheits-Header</h3>
+    <p>Jede Antwort enthält Anweisungen an den Browser, z.&nbsp;B. „führe nur Skripte von dieser
+      Seite aus“ (<em>Content-Security-Policy</em>) oder „zeige mich nicht in fremden Frames an“.
+      Das schützt vor eingeschleustem Fremdcode.</p>
+
+    <h3>Container-Härtung</h3>
+    <ul>
+      <li>Die App läuft <strong>nicht als Administrator</strong> (non-root) im Container.</li>
+      <li>Das Dateisystem ist <strong>schreibgeschützt</strong>; nur <code>/tmp</code> ist beschreibbar.</li>
+      <li>CPU und RAM sind <strong>begrenzt</strong> – ein Fehler kann nicht den ganzen Server lahmlegen.</li>
+      <li>Nur nginx hat offene Ports nach außen; App und Keycloak sind nur intern erreichbar.</li>
+    </ul>
+
+    <h3>Rate-Limiting &amp; Begrenzung</h3>
+    <p>nginx erlaubt pro IP nur ~10 Anfragen/Sekunde; die API liefert maximal 500 Einträge pro
+      Anfrage. Niemand kann die ganze Adressliste „auf einen Schlag“ absaugen.</p>
+
+    <h3>Keine Geheimnisse im Code</h3>
+    <p>Passwörter und Schlüssel stehen ausschließlich in der lokalen <code>.env</code>-Datei,
+      die per <code>.gitignore</code> vom Repository ausgeschlossen ist.</p>
+  </section>
+
+  <!-- ============================================================ -->
+  <section id="verbesserungen">
+    <h2>6. Die letzten Verbesserungen – was, wie, warum</h2>
+    <p>Nach einer kritischen Bewertung des Repositories wurden folgende Punkte umgesetzt.
+      Legende: <span class="badge sec">Sicherheit</span>
+      <span class="badge fix">Korrektur</span> <span class="badge new">Neu</span></p>
+
+    <h3>6.1 Platzhalter-Passwörter werden erkannt <span class="badge sec">Sicherheit</span></h3>
+    <p><strong>Problem:</strong> Die Vorlage <code>.env.example</code> enthielt
+      <code>SECRET_KEY=change-me</code>. Die App prüfte aber nur auf einen <em>anderen</em>
+      Standardwert. Wer die Vorlage einfach kopierte, lief produktiv mit einem erratbaren
+      Schlüssel – damit könnte man Login-Cookies fälschen.</p>
+    <p><strong>Lösung:</strong> In <code>app/config.py</code> gibt es jetzt eine Liste bekannter
+      Platzhalter und eine Mindestlänge von 32 Zeichen. Im Produktivmodus verweigert die App
+      den Start, wenn der Schlüssel schwach ist. Auch ein Platzhalter als
+      <code>OIDC_CLIENT_SECRET</code> gilt als „nicht konfiguriert“.</p>
+<pre><code>PLACEHOLDER_VALUES = {"", "change-me", "insecure-dev-secret-change-me"}
+MIN_SECRET_KEY_LENGTH = 32
+
+@property
+def secret_key_is_weak(self) -> bool:
+    return is_placeholder(self.secret_key) or len(self.secret_key) &lt; 32</code></pre>
+
+    <h3>6.2 Keycloak produktionsreif <span class="badge sec">Sicherheit</span> <span class="badge fix">Korrektur</span></h3>
+    <p><strong>Problem:</strong> Keycloak lief im Entwicklungsmodus (<code>start-dev</code>) mit
+      einer Spielzeug-Datenbank im RAM – jeder Neustart löschte alle Benutzer. Hostname und
+      erlaubte Rücksprung-Adressen waren fest auf <code>localhost</code> verdrahtet, und genau
+      diese Konfiguration wurde automatisch auf den echten Server ausgerollt.</p>
+    <p><strong>Lösung</strong> in <code>docker-compose.yml</code>:</p>
+    <ul>
+      <li>Eigener <strong>Postgres-Container</strong> mit dauerhaftem Speicher (Volume) für Keycloak.</li>
+      <li><code>start</code> statt <code>start-dev</code> (umschaltbar per <code>KC_COMMAND</code> für lokal).</li>
+      <li>Hostname und App-Adresse kommen aus <code>.env</code>
+        (<code>KC_HOSTNAME</code>, <code>APP_PUBLIC_URL</code>). In
+        <code>keycloak/realm-export.json</code> steht nur noch
+        <code>${APP_PUBLIC_URL}/auth/callback</code> – Keycloak setzt den Wert beim Import
+        selbst ein. Keine <code>localhost</code>-Einträge mehr auf dem Server.</li>
+      <li>Veraltetes <code>KC_PROXY=edge</code> durch das aktuelle
+        <code>KC_PROXY_HEADERS=xforwarded</code> ersetzt; Image-Version exakt gepinnt.</li>
+    </ul>
+    <div class="box why">
+      <strong>Warum Umgebungsvariablen statt fester Werte?</strong>
+      Derselbe Code soll lokal (<code>https://localhost</code>) und auf dem Server
+      (<code>https://pflege-finder.example.org</code>) laufen. Alles, was sich zwischen den
+      Umgebungen unterscheidet, gehört in die <code>.env</code>, nicht in den Code.
+    </div>
+
+    <h3>6.3 Automatische Tests und Lint als „Schranke“ <span class="badge new">Neu</span></h3>
+    <p><strong>Problem:</strong> Jeder Push auf <code>main</code> ging sofort und ungeprüft auf
+      den Server – ein Tippfehler hätte die Seite lahmgelegt.</p>
+    <p><strong>Lösung:</strong> Ein Ordner <code>tests/</code> mit 17 Pytest-Tests
+      (API-Filter, Seitengröße, Login-Umleitung, Fail-fast-Checks) und der Code-Prüfer
+      <code>ruff</code>. Beides läuft jetzt als eigener Job <em>vor</em> dem Bauen – und auch
+      für Pull Requests. Schlägt ein Test fehl, wird nichts deployt.</p>
+<pre><code># .github/workflows/deploy.yml (Auszug)
+jobs:
+  test:                      # 1) Prüfen
+    steps:
+      - run: ruff check .
+      - run: pytest -q
+  build-and-push:            # 2) Nur wenn Tests grün
+    needs: test
+  deploy:                    # 3) Nur wenn Build ok
+    needs: build-and-push</code></pre>
+    <details>
+      <summary>Wie funktionieren die Tests ohne echten Server?</summary>
+      <p>FastAPI bringt einen <code>TestClient</code> mit, der die App direkt im Speicher
+        aufruft – kein Docker, keine Netzwerkverbindung. Die Tests setzen Umgebungsvariablen
+        (z.&nbsp;B. <code>AUTH_ENABLED=false</code> oder eine kleine Test-CSV mit 3 Einträgen),
+        laden die App neu und prüfen die Antworten. Ein Test kontrolliert z.&nbsp;B., dass die
+        App mit <code>SECRET_KEY=change-me</code> im Produktivmodus <em>nicht</em> startet.</p>
+    </details>
+
+    <h3>6.4 Nachvollziehbare Deployments statt „latest“ <span class="badge fix">Korrektur</span></h3>
+    <p><strong>Problem:</strong> Der Server zog immer das Image mit dem Tag <code>latest</code>.
+      Man wusste nie genau, welche Version läuft, und ein Zurückrollen war schwierig.</p>
+    <p><strong>Lösung:</strong> Jeder Build wird zusätzlich mit dem Kürzel des Git-Commits
+      getaggt (z.&nbsp;B. <code>sha-1a2b3c4</code>). Der Deploy-Schritt schreibt diesen Tag als
+      <code>IMAGE_TAG</code> in die Server-<code>.env</code>. Rollback = alten Tag eintragen,
+      <code>docker compose up -d</code>.</p>
+
+    <h3>6.5 Stabile IDs für die Stellen <span class="badge fix">Korrektur</span></h3>
+    <p><strong>Problem:</strong> Die ID einer Stelle war einfach ihre Zeilennummer in der CSV.
+      Sortiert jemand die Datei um, bekommen alle Stellen neue IDs – Links und Auswahlen
+      zeigen plötzlich auf andere Einträge.</p>
+    <p><strong>Lösung:</strong> <code>app/seed.py</code> übernimmt jetzt die Spalte
+      <code>unsere_id</code> aus der CSV als Primärschlüssel. Außerdem leert der Import die
+      Tabelle vorher, damit er beliebig oft wiederholt werden kann (wichtig für Tests).</p>
+
+    <h3>6.6 Kleinere Code-Korrekturen in der API <span class="badge fix">Korrektur</span></h3>
+    <ul>
+      <li><strong>Ungültiger Filter wird abgelehnt:</strong> <code>?angebot=foo</code> wurde
+        bisher stillschweigend ignoriert. Jetzt ist der Parameter als feste Auswahlliste
+        (<code>Literal</code>) definiert → Antwort <code>422</code> mit Fehlermeldung, und die
+        erlaubten Werte erscheinen automatisch in der API-Doku.</li>
+      <li><strong>Suche nach <code>%</code> oder <code>_</code>:</strong> Diese Zeichen sind in
+        SQL Platzhalter („beliebig viele Zeichen“). Sie werden jetzt maskiert, sodass wirklich
+        nach dem Zeichen gesucht wird.</li>
+      <li><strong>Zählen statt alles laden:</strong> Für „x von y Treffern“ wurden bisher alle
+        Treffer aus der Datenbank geholt und dann gezählt. Jetzt zählt die Datenbank selbst
+        (<code>COUNT(*)</code>) – schneller und weniger Speicher.</li>
+    </ul>
+
+    <h3>6.7 Strengere Sicherheits-Header <span class="badge sec">Sicherheit</span></h3>
+    <p>Die Content-Security-Policy erlaubte „inline“-CSS, obwohl keines verwendet wird. Die
+      Ausnahme wurde entfernt und <code>frame-ancestors 'none'</code> ergänzt (moderne Form von
+      „nicht in fremde Seiten einbetten“).</p>
+
+    <h3>6.8 nginx: moderne TLS-Einstellungen <span class="badge sec">Sicherheit</span></h3>
+    <p>Die Verschlüsselungsverfahren folgen jetzt der empfohlenen „Mozilla
+      Intermediate“-Liste; TLS-Sitzungen werden zwischengespeichert (schnellere Folgeaufrufe).
+      Für den Keycloak-Pfad <code>/idp/</code> wurde das Rate-Limit gelockert, weil die
+      Admin-Oberfläche viele Dateien auf einmal lädt und sonst ausgebremst wurde.</p>
+
+    <h3>6.9 Aufgeräumt <span class="badge fix">Korrektur</span></h3>
+    <ul>
+      <li>Testdateien (<code>Test.txt</code>, <code>Test123.txt</code>) und eine 9&nbsp;MB
+        große Kopie der Daten (<code>pflegestellen.json</code>, Root-<code>pflegestellen.csv</code>)
+        entfernt. Es gibt jetzt genau <strong>eine</strong> Datenquelle:
+        <code>app/data/pflegestellen.csv</code>.</li>
+      <li>Veraltete Python-Importe ersetzt (<code>uvicorn-worker</code>-Paket), doppelter
+        Healthcheck entfernt.</li>
+      <li>Kommentare und README/ROADMAP, die noch „Login kommt später“ sagten, aktualisiert.</li>
+      <li><strong>Dependabot</strong> eingerichtet: GitHub schlägt automatisch Updates für
+        Python-Pakete, Docker-Images und Actions vor.</li>
+    </ul>
+
+    <div class="box warn">
+      <strong>Noch offen (bewusst nicht umgesetzt)</strong>
+      Demo-Benutzer <code>demo</code> auf dem Server löschen · Impressum &amp;
+      Datenschutzerklärung · Rollen/Rechte (aktuell darf jeder Eingeloggte alles) ·
+      GitHub-Actions auf feste Commit-Versionen pinnen. Alles in
+      <code>docs/ROADMAP.md</code> vermerkt.
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <section id="deploy">
+    <h2>7. Vom Code zum laufenden Server</h2>
+    <p>Wird Code in den Branch <code>main</code> gemerged, passiert vollautomatisch:</p>
+    <div class="diagram">git push main
+   │
+   ▼
+[1] test ──────── ruff + pytest           ✗ Fehler? → Stopp, nichts passiert
+   │ ✓
+   ▼
+[2] build-and-push ── Docker-Image bauen, nach GHCR hochladen
+   │                  (Tags: latest + sha-&lt;commit&gt;)
+   ▼
+[3] deploy ────── per SSH auf den Server:
+                  git pull · IMAGE_TAG in .env schreiben ·
+                  docker compose pull &amp; up -d
+   │
+   ▼
+[4] health check ─ 12× https://localhost/healthz abfragen
+                  ✗ nach 60 s nicht gesund? → Logs ausgeben, Job rot</div>
+    <div class="box why">
+      <strong>Warum ein fertiges Image statt auf dem Server zu bauen?</strong>
+      Das Image wird <em>einmal</em> gebaut und getestet; der Server führt exakt dieses aus.
+      So laufen lokal, in CI und produktiv garantiert dieselben Bytes.
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <section id="start">
+    <h2>8. Selbst ausprobieren</h2>
+    <h3>Nur Backend, ohne Docker und ohne Login (schnellster Weg)</h3>
+<pre><code>python3 -m venv .venv &amp;&amp; source .venv/bin/activate
+pip install -r app/requirements.txt -r requirements-dev.txt
+AUTH_ENABLED=false uvicorn app.main:app --reload
+# → http://localhost:8000   (API-Doku: http://localhost:8000/api/docs)</code></pre>
+
+    <h3>Tests laufen lassen</h3>
+<pre><code>ruff check . &amp;&amp; pytest</code></pre>
+
+    <h3>Komplett mit Login (wie auf dem Server)</h3>
+    <p>Siehe <code>README.md</code>, Abschnitt 7 A. Kurzfassung: <code>.env</code> aus der
+      Vorlage anlegen, Passwörter mit <code>openssl rand -base64 32</code> erzeugen,
+      Dev-Zertifikat generieren, erst Keycloak starten, Client-Secret kopieren, dann App +
+      nginx starten.</p>
+  </section>
+
+  <!-- ============================================================ -->
+  <section id="glossar">
+    <h2>9. Glossar</h2>
+    <dl class="glossar">
+      <dt>API</dt>
+      <dd>Eine Schnittstelle, über die Programme (hier: das JavaScript im Browser) Daten
+        abfragen – statt einer fertigen Webseite kommt rohes JSON zurück.</dd>
+      <dt>Container / Docker</dt>
+      <dd>Ein Container ist ein abgeschottetes Mini-System, in dem genau ein Programm mit allem
+        läuft, was es braucht. Docker baut und startet diese Container. <em>Docker Compose</em>
+        beschreibt mehrere Container und ihr gemeinsames Netzwerk in einer Datei.</dd>
+      <dt>CI/CD</dt>
+      <dd>„Continuous Integration / Continuous Deployment“: Code wird bei jeder Änderung
+        automatisch geprüft (CI) und ausgerollt (CD). Hier über GitHub Actions.</dd>
+      <dt>Cookie (Session)</dt>
+      <dd>Kleines Datenpaket, das der Browser bei jeder Anfrage mitschickt. Die App speichert
+        darin „eingeloggt als …“ – <em>signiert</em> mit dem <code>SECRET_KEY</code>, damit
+        es niemand fälschen kann.</dd>
+      <dt>CSV</dt>
+      <dd>Einfache Textdatei mit Tabellendaten, Spalten durch <code>;</code> getrennt.</dd>
+      <dt>Fail-fast</dt>
+      <dd>Prinzip: Bei fehlerhafter Konfiguration sofort und sichtbar abbrechen, statt
+        „irgendwie“ weiterzulaufen.</dd>
+      <dt>HTTPS / TLS</dt>
+      <dd>Verschlüsselte Verbindung zwischen Browser und Server (das Schloss-Symbol).</dd>
+      <dt>Lint (ruff)</dt>
+      <dd>Automatische Code-Prüfung auf Stil- und häufige Logikfehler, noch bevor etwas läuft.</dd>
+      <dt>Middleware</dt>
+      <dd>Code, der <em>vor</em> jeder Anfrage läuft – wie ein Türsteher, der prüft, ob du
+        rein darfst, bevor die eigentliche Seite angefasst wird.</dd>
+      <dt>OIDC (OpenID Connect)</dt>
+      <dd>Standardverfahren für „Login über einen anderen Dienst“ – dasselbe Prinzip wie
+        „Mit Google anmelden“, nur mit Keycloak.</dd>
+      <dt>Rate-Limiting</dt>
+      <dd>Begrenzung der Anfragen pro Sekunde und IP-Adresse, um Missbrauch zu erschweren.</dd>
+      <dt>Reverse Proxy</dt>
+      <dd>Server, der Anfragen entgegennimmt und an die eigentlichen Programme weiterreicht
+        (hier: nginx).</dd>
+      <dt>Umgebungsvariable / <code>.env</code></dt>
+      <dd>Einstellungen, die von außen in ein Programm gegeben werden. Die Datei
+        <code>.env</code> sammelt sie; sie enthält Passwörter und wird <em>nie</em> ins
+        Repository eingecheckt.</dd>
+    </dl>
+  </section>
+
+</div>
+
+<footer>
+  PL2-HFH · Erklärdokument · Stand: Oktober 2026 · Technische Details siehe
+  <code>README.md</code> und <code>docs/ROADMAP.md</code>
+</footer>
+
+</body>
+</html>

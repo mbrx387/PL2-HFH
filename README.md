@@ -51,12 +51,16 @@ PL2-HFH/
 │   ├── static/js/app.js          # Liste laden, filtern, mailto-Link bauen
 │   ├── Dockerfile
 │   └── requirements.txt
-├── keycloak/realm-export.json    # Realm/Client/Demo-User, automatischer Import
+├── keycloak/realm-export.json    # Realm/Client/Demo-User, automatischer Import (URLs aus APP_PUBLIC_URL)
 ├── nginx/
 │   ├── nginx.conf
 │   └── conf.d/default.conf       # TLS-Terminierung, Reverse Proxy, Rate-Limit, /idp/-Route (Keycloak)
 ├── scripts/generate_dev_cert.sh  # Self-signed Zertifikat für lokale Tests
+├── tests/                        # Pytest (API, Auth-Middleware, Fail-Fast-Checks)
+├── .github/workflows/deploy.yml  # CI: Lint + Tests -> Image-Build -> Deploy per SSH
 ├── docker-compose.yml
+├── pyproject.toml                # ruff/pytest-Konfiguration
+├── requirements-dev.txt
 ├── .env.example
 └── docs/ROADMAP.md               # Nächste Schritte / offene Punkte
 ```
@@ -66,7 +70,9 @@ PL2-HFH/
 `app/data/pflegestellen.csv` enthält ~4.090 Beratungs-/Pflegestellen
 (Name, Adresse, PLZ/Ort/Bundesland, Kontakt, Geokoordinaten, Angebotsarten)
 aus dem Datenimport im Branch `pflegestellen` dieses Repos. Sie dient hier
-als realistischer Demo-/Startdatensatz für das Grundgerüst. Die Datei ist
+als realistischer Demo-/Startdatensatz für das Grundgerüst und ist die
+**einzige** Kopie im Repo. Die Spalte `unsere_id` wird als stabile Primär-ID
+übernommen, d.h. IDs ändern sich nicht, wenn Zeilen umsortiert werden. Die Datei ist
 bewusst versioniert (statt z.B. in einem Volume abgelegt): Sie ist die
 **Quelle der Wahrheit**, aus der die In-Memory-Datenbank bei jedem
 Containerstart neu aufgebaut wird. Das macht App-Instanzen zustandslos und
@@ -199,15 +205,19 @@ Keycloak *vor* der App. Details/Begründung: [`docs/ROADMAP.md`](docs/ROADMAP.md
 
 ```bash
 cp .env.example .env
-# SECRET_KEY und KEYCLOAK_ADMIN_PASSWORD in .env auf zufällige Werte setzen,
-# z.B. jeweils: openssl rand -base64 32
+# In .env setzen: SECRET_KEY, KEYCLOAK_ADMIN_PASSWORD, KEYCLOAK_DB_PASSWORD
+# (je: openssl rand -base64 32), ausserdem fuer lokal:
+#   APP_PUBLIC_URL=https://localhost
+#   KC_HOSTNAME=https://localhost/idp
+#   KC_COMMAND=start-dev
+#   OIDC_ISSUER=https://localhost/idp/realms/hfh-pflege
+#   ALLOWED_ORIGINS=https://localhost
 ./scripts/generate_dev_cert.sh          # einmalig, selbstsigniertes Dev-Zertifikat
 
-docker compose --profile sso up -d keycloak   # 1) nur Keycloak starten
+docker compose --profile sso up -d keycloak   # 1) nur Keycloak (+ DB) starten
 # Client-Secret kopieren: http://localhost:8080/idp/admin/ (admin / dein
 # KEYCLOAK_ADMIN_PASSWORD) -> Realm "hfh-pflege" -> Clients -> pflege-finder
-# -> Credentials -> Client secret. In .env als OIDC_CLIENT_SECRET eintragen,
-# OIDC_ISSUER auf https://localhost/idp/realms/hfh-pflege setzen.
+# -> Credentials -> Client secret. In .env als OIDC_CLIENT_SECRET eintragen.
 
 docker compose --profile sso up -d --build    # 2) jetzt App + nginx starten
 # -> https://localhost (Zertifikatswarnung ist bei selbstsigniertem Zertifikat normal)
@@ -228,9 +238,15 @@ docker compose up --build       # kein --profile sso nötig
 
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
-pip install -r app/requirements.txt
+pip install -r app/requirements.txt -r requirements-dev.txt
 AUTH_ENABLED=false uvicorn app.main:app --reload
 # -> http://localhost:8000
+```
+
+**Tests und Lint** (laufen in CI vor jedem Build/Deploy, auch für Pull Requests):
+
+```bash
+ruff check . && pytest
 ```
 
 API-Dokumentation (Swagger UI) liegt automatisch unter `/api/docs` (ebenfalls

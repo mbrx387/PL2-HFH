@@ -1,6 +1,8 @@
 services:
   app:
-    image: ghcr.io/mbrx387/pl2-hfh/app:latest
+    # IMAGE_TAG wird vom Deploy-Workflow auf den Commit-SHA gesetzt (reproduzierbar,
+    # Rollback = alten Tag in .env eintragen). Lokal reicht der Default/build.
+    image: ghcr.io/mbrx387/pl2-hfh/app:${IMAGE_TAG:-latest}
     build:
       context: .
       dockerfile: app/Dockerfile
@@ -42,41 +44,58 @@ services:
     networks:
       - internal
 
-  # Noch nicht am Frontend/Backend angebunden (das folgt als eigener Schritt,
-  # sobald der Login-Code in der App steht) - siehe README, Abschnitt 5, und
-  # docs/ROADMAP.md fuer die vollstaendige Inbetriebnahme-Anleitung.
-  # Aktivieren mit: docker compose --profile sso up -d keycloak
-  keycloak:
-    image: quay.io/keycloak/keycloak:25.0
-    # --import-realm liest beim Start einmalig keycloak/realm-export.json ein
-    # und legt Realm + Client + Demo-User reproduzierbar an (kein manuelles
-    # Geklicke noetig). "start-dev" ist der Entwicklungsmodus (In-Memory-H2-
-    # DB, HTTP erlaubt) - fuer den echten Produktivbetrieb auf dem
-    # Ubuntu-Server siehe die Haertungshinweise in docs/ROADMAP.md
-    # (eigene Postgres-DB, "start" statt "start-dev", KC_HOSTNAME).
-    command: start-dev --import-realm
+  # Keycloak (SSO) + eigene Postgres-DB. Aktivieren mit:
+  #   docker compose --profile sso up -d
+  # Die App erzwingt den Login ueber dieses Keycloak (siehe app/auth.py);
+  # Inbetriebnahme/Bootstrapping: docs/ROADMAP.md, Abschnitt 1.1.
+  keycloak-db:
+    image: postgres:16-alpine
     profiles: ["sso"]
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: ${KEYCLOAK_DB_PASSWORD:?set-in-.env}
+    volumes:
+      - keycloak-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keycloak -d keycloak"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - internal
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:25.0.6
+    # KC_COMMAND: "start" (Produktion, Default) oder "start-dev" (lokal).
+    # --import-realm liest beim ERSTEN Start keycloak/realm-export.json ein
+    # (Realm + Client + Demo-User); existiert der Realm schon, wird uebersprungen.
+    command: ${KC_COMMAND:-start} --import-realm
+    profiles: ["sso"]
+    restart: unless-stopped
+    depends_on:
+      keycloak-db:
+        condition: service_healthy
     environment:
       KEYCLOAK_ADMIN: admin
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?set-in-.env}
-      KC_PROXY: edge
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://keycloak-db:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:?set-in-.env}
+      # TLS terminiert nginx; Keycloak spricht intern HTTP und vertraut den
+      # X-Forwarded-*-Headern (ersetzt das veraltete KC_PROXY=edge).
+      KC_HTTP_ENABLED: "true"
+      KC_PROXY_HEADERS: xforwarded
       KC_HTTP_RELATIVE_PATH: /idp
-      # Fest verdrahtete, oeffentliche Basis-URL (INKLUSIVE Pfad-Praefix)
-      # fuer ALLE von Keycloak selbst generierten URLs - z.B. die
-      # "action"-URL des Login-Formulars, oder authorization_endpoint im
-      # Discovery-Dokument. Unabhaengig davon, ueber welchen Kanal/Hostname
-      # eine Anfrage tatsaechlich hereinkommt (wichtig, weil die App
-      # Server-zu-Server direkt im internen Docker-Netz auf Keycloak
-      # zugreift, siehe OIDC_ISSUER_INTERNAL in .env, waehrend der Browser
-      # ueber nginx/https geht - beides muss in den generierten URLs auf
-      # dieselbe oeffentliche Adresse zeigen).
-      # WICHTIG: den Pfad ("/idp") hier explizit mit angeben - ohne Pfad in
-      # KC_HOSTNAME uebernimmt Keycloak KC_HTTP_RELATIVE_PATH nicht in alle
-      # selbst generierten Links (z.B. fehlte "/idp" sonst in der
-      # Login-Formular-action-URL - beim Testen aufgefallen und gefixt).
-      # Fuer den Produktivbetrieb auf die echte Domain aendern, z.B.
-      # https://pflege-finder.example.org/idp
-      KC_HOSTNAME: https://localhost/idp
+      # Oeffentliche Basis-URL INKLUSIVE /idp - Keycloak baut daraus alle
+      # selbst generierten Links (Login-Formular, Discovery, iss-Claim).
+      # Ohne Pfadanteil fehlt "/idp" in einigen Links.
+      KC_HOSTNAME: ${KC_HOSTNAME:?set-in-.env}
+      # Wird per ${...}-Platzhalter in keycloak/realm-export.json eingesetzt
+      # (Redirect-/Logout-URIs des Clients).
+      APP_PUBLIC_URL: ${APP_PUBLIC_URL:?set-in-.env}
     volumes:
       - ./keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json:ro
     ports:
@@ -87,6 +106,9 @@ services:
       - "127.0.0.1:8080:8080"
     networks:
       - internal
+
+volumes:
+  keycloak-db-data:
 
 networks:
   internal:
