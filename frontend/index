@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pflegezentren-Finder (Vorschau)</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-row">
+      <div>
+        <h1>Pflegezentren-Finder</h1>
+        <p class="subtitle">Pflege- und Beratungsstellen in Deutschland finden und per E-Mail kontaktieren</p>
+      </div>
+      <!-- AP6-FEHLT: Navigation (Historie, Dashboard, Pflege) erst anlegen, wenn die Seiten existieren.
+         Sichtbarkeit dann über data-recht (permissions.js), Durchsetzung im Backend (AP1). -->
+      <div class="user-info">
+        <span>Angemeldet als {{ user.name or user.email or user.sub }}</span>
+        <a href="/auth/logout">Abmelden</a>
+      </div>
+      
+    </div>
+  </header>
+   <main class="container">
+    <section class="filters" aria-label="Filter">
+      <input type="search" id="search" placeholder="Suche nach Name, Ort oder PLZ …" aria-label="Suche" autocomplete="off" />
+      <select id="bundesland-filter" aria-label="Bundesland filtern">
+        <option value="">Alle Bundesländer</option>
+        <option value="">Baden-Württemberg</option>
+        <option value="">Bayern</option>
+        <option value="">Berlin</option>
+        <option value="">Brandenburg</option>
+        <option value="">Bremen</option>
+        <option value="">Hamburg</option>
+        <option value="">Hessen</option>
+        <option value="">Mecklenburg-Vorpommern</option>
+        <option value="">Niedersachsen</option>
+        <option value="">Nordrhein-Westfalen</option>
+        <option value="">Rheinlandpfalz</option>
+        <option value="">Saarland</option>
+        <option value="">Sachsen</option>
+        <option value="">Sachsen-Anhalt</option>
+        <option value="">Schleswig-Holstein</option>
+        <option value="">Thüringen</option>
+      </select>
+      <select id="angebot-filter" aria-label="Angebot filtern">
+        <option value="">Alle Angebote</option>
+        <!-- {# Werte = Spaltennamen in models.py. AP6-FEHLT: aus dem Backend laden statt doppelt zu pflegen. #} -->
+        <option value="pflegestuetzpunkt">Pflegestützpunkt</option>
+        <option value="pflegeberatung">Pflegeberatung</option>
+      </select>
+     <!-- {# AP6-FEHLT (AP2): Landkreis/Stadt/Gemeinde als abhängige Filter, sobald es die Hierarchie gibt. #} -->
+    </section>
+
+    <section class="list-meta">
+      <span id="result-count" role="status" aria-live="polite">Lade Daten …</span>
+      <div class="list-actions">
+        <button id="select-all" type="button">Alle sichtbaren auswählen</button>
+        <button id="select-none" type="button">Auswahl leeren</button>
+      </div>
+    </section>
+
+    <section aria-label="Ergebnisliste">
+      <ul id="center-list" class="center-list"></ul>
+      <nav id="pager" class="pager" aria-label="Seitenwahl"></nav>
+    </section>
+  </main>
+
+  <footer class="mail-bar">
+    <span><strong id="selected-count">0</strong> ausgewählt</span>
+    <div id="mail-parts" class="mail-parts"></div>
+    <p id="mail-warning" class="mail-warning" role="alert" hidden></p>
+    <button id="send-mail" type="button" disabled>E-Mail an Auswahl senden (öffnet Ihr Mailprogramm)</button>
+  </footer>
+
+  <script type="module" src="main.js"></script>
+
+</body>
+</html>
