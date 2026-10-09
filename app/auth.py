@@ -2,8 +2,8 @@
 
 Der Login-Zustand liegt ausschliesslich in einem signierten, httponly
 Session-Cookie (Starlette SessionMiddleware, siehe main.py) - es gibt
-bewusst KEINEN serverseitigen Session-Store. Das passt zum Rest der
-Anwendung (zustandslos, In-Memory-DB, austauschbare Container) und bedeutet:
+bewusst KEINEN serverseitigen Session-Store. Das passt zur zustandslosen
+Anwendungsinstanz und bedeutet:
 ein Neustart der App invalidiert keine bestehenden Logins (das Cookie bleibt
 gueltig, solange SECRET_KEY gleich bleibt), aber es gibt auch keine
 serverseitige Moeglichkeit, eine einzelne Session vorzeitig zu widerrufen

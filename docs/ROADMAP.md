@@ -153,13 +153,13 @@ Realisiert in `app/auth.py` (mit `authlib`) + `app/main.py`:
   Pytest abgedeckt (`tests/test_auth.py`); der eigentliche Token-Tausch mit
   Keycloak nur manuell End-to-End.
 
-## 2. Von SQLite (In-Memory) zu einer persistenten Datenbank
+## 2. PostgreSQL-Betrieb
 
-Sobald es echte Schreibvorgänge gibt (z.B. Pflege der Stellen-Daten über ein
-Admin-Interface statt CSV-Import), sollte auf **PostgreSQL** umgestiegen
-werden. Da bereits mit SQLAlchemy-Modellen gearbeitet wird, ist das primär
-ein Wechsel der Connection-URL + ein zusätzlicher `db`-Service in
-`docker-compose.yml` + Alembic für Migrationen.
+Die App verwendet PostgreSQL bereits als persistente Datenbank. Die Datei
+`app/data/pflegestellen.csv` wird bei Bedarf manuell über
+`db/import_centers.sql` importiert; der App-Start überschreibt die Daten nicht.
+Ein nächster Schritt wäre ein automatisierter, versionierter Migrationsablauf
+für zukünftige Schemaänderungen (z.B. Alembic).
 
 ## 3. Let's Encrypt statt selbstsigniertem Zertifikat
 

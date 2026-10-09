@@ -11,10 +11,10 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_db
-from app.models import Center
+from app.models import Center, Service
 from app.schemas import CenterListResponse, CenterOut
 
 router = APIRouter(prefix="/api", tags=["centers"])
@@ -30,6 +30,15 @@ Angebot = Literal[
     "betreuungsberatung",
 ]
 
+ANGEBOT_SERVICE_NAME = {
+    "pflegestuetzpunkt": "Pflegestützpunkt",
+    "pflegeberatung": "Pflegeberatung",
+    "wohnberatung": "Wohnberatung",
+    "demenzberatung": "Demenzberatung",
+    "angehoerigenberatung": "Angehörigenberatung",
+    "betreuungsberatung": "Betreuungsberatung",
+}
+
 
 def _escape_like(value: str) -> str:
     return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
@@ -44,7 +53,7 @@ def list_centers(
     limit: int = Query(200, ge=1, le=MAX_PAGE_SIZE),
     offset: int = Query(0, ge=0),
 ):
-    stmt = select(Center)
+    stmt = select(Center).options(selectinload(Center.services))
 
     if bundesland:
         stmt = stmt.where(Center.bundesland == bundesland.upper())
@@ -58,7 +67,7 @@ def list_centers(
         )
 
     if angebot:
-        stmt = stmt.where(getattr(Center, angebot).is_(True))
+        stmt = stmt.where(Center.services.any(Service.name == ANGEBOT_SERVICE_NAME[angebot]))
 
     total = db.execute(select(func.count()).select_from(stmt.subquery())).scalar_one()
     items = db.execute(stmt.order_by(Center.ort, Center.name).offset(offset).limit(limit)).scalars().all()

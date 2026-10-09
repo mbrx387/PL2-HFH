@@ -21,7 +21,7 @@ Projekts; Datenmodell/Fachlogik werden im Team weiter ausgebaut (siehe
 | Frage | Entscheidung | Warum |
 |---|---|---|
 | Framework | **FastAPI (Python)** | Klein, schnell erlernbar, automatische OpenAPI-Doku unter `/api/docs`, native Typvalidierung (Pydantic), asynchron-fähig, sehr verbreitet – gute Basis für ein Hochschulprojekt mit wechselnden Mitwirkenden. |
-| Datenhaltung | **In-Memory-SQLite über SQLAlchemy**, befüllt aus einer versionierten CSV-Datei | Kein eigener DB-Server nötig (Vorgabe: „kein MySQL-Server o.ä.“), aber trotzdem echtes SQL (Filtern/Suchen/Sortieren) statt Handstricken auf Listen. Migration auf Postgres/MySQL später ist nur ein Wechsel der Connection-URL, da über SQLAlchemy-Modelle gearbeitet wird. |
+| Datenhaltung | **Persistentes PostgreSQL über SQLAlchemy**, initial befüllt aus einer versionierten CSV-Datei | Gemeinsame, dauerhafte Datenbank für alle App-Worker; ein expliziter CSV-Import hält die Datenquelle nachvollziehbar. |
 | Frontend | **Server-gerenderte Jinja2-Seite + Vanilla JS**, kein SPA-Framework | Kein Build-Schritt, kein Node-Toolchain-Overhead im Container, niedrige Einstiegshürde fürs Team, für den beschriebenen Funktionsumfang (Liste + Checkboxen + Filter) ausreichend. |
 | Mailversand | **`mailto:`-Link im Browser** statt serverseitigem SMTP-Versand | Erfüllt die Vorgabe „über die eigene Standardmailbox versenden“ exakt, UND: der Server verarbeitet dadurch keine SMTP-Zugangsdaten, protokolliert keine E-Mail-Inhalte und hat keinen Angriffsvektor „Mailrelay-Missbrauch“. Sicherheits- und Datenschutzvorteil in einem. |
 | Containerisierung | **Docker Compose** (nicht Swarm/Kubernetes) | Ein Ubuntu-Server, überschaubare Last, kleines Team. Docker Compose deckt „App + Reverse Proxy (+ optional SSO)“ vollständig ab, ohne die Betriebskomplexität eines Cluster-Orchestrators. Migration zu Swarm/K8s bleibt möglich, ist aber aktuell nicht gerechtfertigt (siehe Abschnitt 4). |
@@ -37,15 +37,14 @@ PL2-HFH/
 ├── app/                        # FastAPI-Anwendung (Python-Package "app")
 │   ├── main.py                 # Einstiegspunkt, Startup/Lifespan, Routing, Middleware-Reihenfolge
 │   ├── config.py                # Einstellungen aus Umgebungsvariablen (.env)
-│   ├── database.py              # In-Memory-SQLite-Engine (SQLAlchemy)
+│   ├── database.py              # SQLAlchemy-Verbindung zur konfigurierten Datenbank
 │   ├── models.py                 # ORM-Modell "Center"
 │   ├── schemas.py                # Pydantic-Response-Schemas
-│   ├── seed.py                   # Befüllt die DB aus app/data/*.csv beim Start
 │   ├── security.py               # Security-Header-Middleware
 │   ├── auth.py                   # OIDC-Login (Keycloak), Login-Pflicht-Middleware
 │   ├── gunicorn_worker.py        # Proxy-Header-fähiger Uvicorn-Worker (siehe auth.py)
 │   ├── routers/centers.py        # GET /api/centers, /api/bundeslaender
-│   ├── data/pflegestellen.csv    # Seed-/Demodaten (Quelle der Wahrheit)
+│   ├── data/pflegestellen.csv    # Datenquelle für den manuellen PostgreSQL-Import
 │   ├── templates/index.html      # Server-gerenderte Startseite
 │   ├── static/css/style.css
 │   ├── static/js/app.js          # Liste laden, filtern, mailto-Link bauen
@@ -54,6 +53,7 @@ PL2-HFH/
 ├── keycloak/realm-export.json    # Realm/Client/Demo-User, automatischer Import (URLs aus APP_PUBLIC_URL)
 ├── db/
 │   ├── init/001_create_centers.sql          # Grundschema für eine neue PostgreSQL-Datenbank
+│   └── import_centers.sql                   # Import der CSV-Daten in die Datenbank
 ├── nginx/
 │   ├── nginx.conf
 │   └── conf.d/default.conf       # TLS-Terminierung, Reverse Proxy, Rate-Limit, /idp/-Route (Keycloak)
@@ -72,32 +72,24 @@ PL2-HFH/
 `app/data/pflegestellen.csv` enthält ~4.090 Beratungs-/Pflegestellen
 (Name, Adresse, PLZ/Ort/Bundesland, Kontakt, Geokoordinaten, Angebotsarten)
 aus dem Datenimport im Branch `pflegestellen` dieses Repos. Sie dient hier
-als realistischer Demo-/Startdatensatz für das Grundgerüst und ist die
-**einzige** Kopie im Repo. Die Spalte `unsere_id` wird als stabile Primär-ID
-übernommen, d.h. IDs ändern sich nicht, wenn Zeilen umsortiert werden. Die Datei ist
-bewusst versioniert (statt z.B. in einem Volume abgelegt): Sie ist die
-**Quelle der Wahrheit**, aus der die In-Memory-Datenbank bei jedem
-Containerstart neu aufgebaut wird. Das macht App-Instanzen zustandslos und
-austauschbar und macht "Datenverlust bei Neustart" (typisches Risiko einer
-In-Memory-DB) irrelevant.
+als Datengrundlage für die Anwendung. Die Datei ist versioniert und dient als
+Quelle für den initialen bzw. erneuten manuellen Import in PostgreSQL. Die
+Spalte `unsere_id` wird als stabile Primär-ID übernommen, d.h. IDs ändern sich
+nicht, wenn Zeilen umsortiert werden.
 
-### PostgreSQL-Schema (vorbereitet, noch nicht von der App verwendet)
+### PostgreSQL-Schema und App-Verbindung
 
-Der Compose-Service `app-db` stellt lokal eine persistente PostgreSQL-Datenbank
-bereit. Das Schema besteht aus `centers` (Stammdaten), `services`
+Der Compose-Service `app-db` stellt eine persistente PostgreSQL-Datenbank
+bereit, die von der App verwendet wird. Das Schema besteht aus `centers` (Stammdaten), `services`
 (Angebotskatalog) und `center_services` (Zuordnung). Die Angebotsdaten liegen
 nicht mehr als einzelne Boolean-Spalten oder Freitext in `centers`.
-Details zu Tabellen, Index, Init-Skript und CSV-Import stehen in der
+Details zu Verbindung, Tabellen, Index, Init-Skript und CSV-Import stehen in der
 [Dokumentation des PostgreSQL-Schemas](docs/DATENBANKSCHEMA.md).
 
 `db/init/001_create_centers.sql` wird vom PostgreSQL-Image nur beim ersten
 Initialisieren eines leeren Datenbank-Volumes automatisch ausgeführt. Die
-Beispieldaten importierst du danach manuell aus der CSV-Datei; die Befehle
-stehen in der verlinkten Schema-Dokumentation.
-
-Die Anwendung verwendet derzeit weiterhin die SQLite-In-Memory-Datenbank und
-lädt ihre Demo-Daten aus der CSV-Datei. Eine Verbindung von App zu PostgreSQL
-ist ein separater, späterer Schritt.
+Pflegestellen werden nicht bei jedem App-Start neu geladen; der Import aus
+`app/data/pflegestellen.csv` wird separat und gezielt ausgeführt.
 
 ## 4. Hosting-Konzept
 
@@ -115,12 +107,12 @@ Internet
 │  │   nginx    │◄────►│   FastAPI-App   │ │
 │  │ (TLS-Proxy)│      │ (Gunicorn+      │ │
 │  │ Port 80/443│      │  Uvicorn-Worker)│ │
-│  └────────────┘      │  In-Memory-DB   │ │
-│        ▲              └────────────────┘ │
-│        │ Compose-Profil "sso"            │
-│  ┌────────────┐                          │
-│  │  Keycloak  │  (Login, /idp/…)        │
-│  └────────────┘                          │
+│  └────────────┘      └───────┬─────────┘ │
+│        ▲                     │            │
+│  ┌────────────┐       ┌──────▼───────┐   │
+│  │  Keycloak  │       │ PostgreSQL   │   │
+│  └────────────┘       └──────────────┘   │
+│    Compose-Profil "sso"                  │
 │                                          │
 │   docker network "internal" (bridge)     │
 └─────────────────────────────────────────┘
@@ -211,10 +203,8 @@ nachträglich aufgesetzt:
   Login hat vollen Zugriff auf alle Funktionen. Für ein reines
   Beratungsstellen-Verzeichnis vertretbar, sollte aber vor produktivem
   Einsatz mit sensibleren Daten überdacht werden.
-- Die In-Memory-Datenbank verliert ihren Zustand bei jedem Neustart –
-  gewollt, da sie aus der versionierten CSV neu aufgebaut wird. Nutzerbezogene
-  Zustände (z.B. „gemerkte Auswahl über Sessions hinweg“) gibt es entsprechend
-  noch nicht.
+- Die Beratungsstellendaten sind in PostgreSQL persistent. Der manuelle
+  CSV-Import verändert die Daten gezielt; ein App-Neustart lädt sie nicht neu.
 
 ## 7. Lokal starten
 

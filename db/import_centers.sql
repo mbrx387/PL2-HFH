@@ -23,7 +23,7 @@ CREATE TEMP TABLE centers_import (
     updated_at text
 ) ON COMMIT DROP;
 
-\copy centers_import FROM '/tmp/centers.csv' WITH (FORMAT csv, HEADER true, DELIMITER ';', ENCODING 'UTF8')
+\copy centers_import FROM '/tmp/pflegestellen.csv' WITH (FORMAT csv, HEADER true, DELIMITER ';', ENCODING 'UTF8')
 
 INSERT INTO centers (
     id,
@@ -79,9 +79,10 @@ WHERE cs.center_id = btrim(imported.unsere_id)::integer;
 INSERT INTO services (name)
 SELECT DISTINCT offered.service_name
 FROM (
-    SELECT btrim(leistungen) AS service_name
-    FROM centers_import
-    WHERE NULLIF(btrim(leistungen), '') IS NOT NULL
+    SELECT btrim(offered.value) AS service_name
+    FROM centers_import AS imported
+    CROSS JOIN LATERAL unnest(string_to_array(COALESCE(imported.leistungen, ''), ',')) AS offered(value)
+    WHERE btrim(offered.value) <> ''
 
     UNION ALL
 
@@ -105,9 +106,12 @@ SELECT imported_offers.center_id, services.id
 FROM (
     SELECT
         btrim(imported.unsere_id)::integer AS center_id,
-        btrim(imported.leistungen) AS service_name
+        btrim(offered.value) AS service_name
     FROM centers_import AS imported
-    WHERE NULLIF(btrim(imported.leistungen), '') IS NOT NULL
+    CROSS JOIN LATERAL unnest(
+        string_to_array(COALESCE(imported.leistungen, ''), ',')
+    ) AS offered(value)
+    WHERE btrim(offered.value) <> ''
 
     UNION ALL
 

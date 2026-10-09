@@ -188,15 +188,15 @@
 ┌─────────────────────────────────────────────────────────┐
 │  Ubuntu-Server                                           │
 │                                                          │
-│   ┌───────────┐          ┌──────────────────────────┐    │
-│   │   nginx   │ ───────► │  App (FastAPI / Python)  │    │
-│   │ "Türsteher"│          │  + Datenbank im RAM      │    │
-│   └───────────┘          └──────────────────────────┘    │
-│         │                                                │
-│         │ /idp/…         ┌──────────────┐  ┌──────────┐  │
-│         └──────────────► │   Keycloak   │─►│ Postgres │  │
-│                          │  (Login)     │  │ (für KC) │  │
-│                          └──────────────┘  └──────────┘  │
+│   ┌───────────┐       ┌──────────────┐       ┌───────────┐ │
+│   │   nginx   │ ────► │ App (FastAPI)│ ────► │ Postgres  │ │
+│  │ "Türsteher"│       │              │       │ App-Daten │ │
+│   └───────────┘       └──────────────┘       └───────────┘ │
+│         │                                               │
+│         │ /idp/…        ┌──────────────┐  ┌──────────┐ │
+│         └─────────────► │   Keycloak   │─►│ Postgres │ │
+│                         │   (Login)    │  │ (für KC) │ │
+│                         └──────────────┘  └──────────┘ │
 │                                                          │
 │   internes Docker-Netzwerk – von außen nicht erreichbar  │
 └─────────────────────────────────────────────────────────┘</div>
@@ -213,9 +213,8 @@
       </tr>
       <tr>
         <td><strong>App</strong> (Python, FastAPI)</td>
-        <td>Liefert die Webseite aus und beantwortet die Datenabfragen
-          (<code>/api/centers</code>). Lädt beim Start die CSV-Datei in eine kleine
-          Datenbank im Arbeitsspeicher.</td>
+        <td>Liefert die Webseite aus und beantwortet Datenabfragen
+          (<code>/api/centers</code>) gegen PostgreSQL.</td>
         <td>Python ist einsteigerfreundlich; FastAPI ist klein, schnell und erzeugt die
           API-Dokumentation automatisch (<code>/api/docs</code>).</td>
       </tr>
@@ -227,19 +226,17 @@
           Open-Source-Standardlösung, die genau das seit Jahren macht.</td>
       </tr>
       <tr>
-        <td><strong>Postgres</strong> (nur für Keycloak)</td>
-        <td>Speichert Keycloaks Benutzerkonten dauerhaft auf der Festplatte.</td>
-        <td>Ohne echte Datenbank würde Keycloak alle Konten bei jedem Neustart vergessen.</td>
+        <td><strong>Postgres</strong> (für App und Keycloak)</td>
+        <td>Speichert Beratungsstellen und Keycloak-Benutzerkonten jeweils dauerhaft in getrennten Datenbanken.</td>
+        <td>Die App und Keycloak verwenden getrennte Datenbanken und Volumes.</td>
       </tr>
     </table>
 
     <div class="box">
-      <strong>Warum liegt die Datenbank der App „nur im Arbeitsspeicher“?</strong>
-      Die Stellen-Daten ändern sich nicht durch die Nutzer:innen. Die
-      <strong>CSV-Datei im Repository</strong> ist die „Wahrheit“; beim Start wird sie in eine
-      SQLite-Datenbank im RAM geladen. Vorteil: kein Datenbank-Server nötig, trotzdem echtes
-      SQL zum Filtern/Suchen. Startet der Container neu, wird einfach alles frisch geladen –
-      es kann nichts verloren gehen.
+      <strong>Wie kommen die Stellen in die App-Datenbank?</strong>
+      Die App verwendet eine persistente PostgreSQL-Datenbank. Die versionierte
+      <strong>CSV-Datei im Repository</strong> ist die Datenquelle und wird gezielt mit
+      <code>db/import_centers.sql</code> importiert. Ein App-Neustart verändert die Daten nicht.
     </div>
   </section>
 
@@ -276,13 +273,13 @@
     <h2>4. Wo liegt welcher Code?</h2>
     <table>
       <tr><th>Datei / Ordner</th><th>Inhalt in einem Satz</th></tr>
-      <tr><td><code>app/main.py</code></td><td>Startpunkt: baut die App zusammen, lädt die CSV, prüft beim Start, ob die Konfiguration sicher ist.</td></tr>
+      <tr><td><code>app/main.py</code></td><td>Startpunkt: baut die App zusammen, prüft die Konfiguration und die Datenbankverbindung.</td></tr>
       <tr><td><code>app/config.py</code></td><td>Liest alle Einstellungen aus der <code>.env</code>-Datei (Umgebungsvariablen).</td></tr>
       <tr><td><code>app/auth.py</code></td><td>Login/Logout mit Keycloak und der „Türsteher“ (Middleware), der nicht eingeloggte Besucher:innen zum Login schickt.</td></tr>
       <tr><td><code>app/security.py</code></td><td>Setzt Sicherheits-Header auf jede Antwort (siehe Abschnitt 5).</td></tr>
       <tr><td><code>app/routers/centers.py</code></td><td>Die Daten-Schnittstelle: <code>/api/centers</code> (Liste mit Filtern) und <code>/api/bundeslaender</code>.</td></tr>
-      <tr><td><code>app/models.py</code>, <code>app/database.py</code></td><td>Wie eine „Stelle“ in der Datenbank aussieht und wie die RAM-Datenbank angelegt wird.</td></tr>
-      <tr><td><code>app/seed.py</code></td><td>Liest <code>app/data/pflegestellen.csv</code> und schreibt sie in die Datenbank.</td></tr>
+      <tr><td><code>app/models.py</code>, <code>app/database.py</code></td><td>ORM-Modelle und SQLAlchemy-Verbindung zur PostgreSQL-Datenbank.</td></tr>
+      <tr><td><code>db/import_centers.sql</code></td><td>Importiert die versionierte CSV gezielt in PostgreSQL.</td></tr>
       <tr><td><code>app/templates/index.html</code>, <code>app/static/</code></td><td>Die Webseite selbst: HTML, CSS und das JavaScript für Liste, Filter und den mailto-Link.</td></tr>
       <tr><td><code>app/Dockerfile</code></td><td>Bauanleitung für den App-Container (welches Python, welche Pakete, wie starten).</td></tr>
       <tr><td><code>docker-compose.yml</code></td><td>Der „Bauplan“ aller Container zusammen: App, nginx, Keycloak, Postgres, Netzwerk.</td></tr>
@@ -457,39 +454,39 @@
     <h2>8. Wie genau die Datenbank eingebunden ist</h2>
 
     <h3>Die Idee in einem Satz</h3>
-    <p>Die CSV-Datei im Repository ist die Wahrheit; beim Start wird sie in eine
-      SQLite-Datenbank <em>im Arbeitsspeicher</em> geladen, und die API fragt diese per SQL ab.</p>
+    <p>Die versionierte CSV ist die Datenquelle. Ein manueller Import überträgt sie
+      in PostgreSQL; die API liest die persistenten Datensätze über SQLAlchemy.</p>
 
-    <div class="diagram">app/data/pflegestellen.csv          (versioniert in Git, ~4.090 Zeilen)
+    <div class="diagram">app/data/pflegestellen.csv          (versioniert in Git)
           │
-          │  beim Containerstart (lifespan in main.py)
+          │  gezielter Import mit db/import_centers.sql
           ▼
-   seed.py: CSV lesen ─► Zeile für Zeile Center(...)-Objekte ─► db.commit()
+   centers / services / center_services
           │
           ▼
-   SQLite ":memory:"  ─ Tabelle "centers" mit Indizes auf name, plz, ort, bundesland
+   PostgreSQL (persistentes Docker-Volume)
           ▲
           │  pro Anfrage: Session öffnen → SELECT … → Session schließen
           │
    routers/centers.py  (/api/centers, /api/bundeslaender)</div>
 
-    <h3>Die vier beteiligten Dateien</h3>
+    <h3>Die beteiligten Dateien</h3>
     <table>
       <tr><th>Datei</th><th>Aufgabe</th><th>Kernstück</th></tr>
       <tr>
         <td><code>database.py</code></td>
-        <td>Erzeugt die Verbindung (<em>Engine</em>) und die Session-Fabrik.</td>
-        <td><code>create_engine("sqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False})</code></td>
+        <td>Erzeugt die konfigurierte Datenbankverbindung (<em>Engine</em>) und die Session-Fabrik.</td>
+        <td><code>DATABASE_URL</code> wird in Compose auf PostgreSQL gesetzt.</td>
       </tr>
       <tr>
         <td><code>models.py</code></td>
-        <td>Beschreibt die Tabelle als Python-Klasse (<em>ORM</em>).</td>
-        <td><code>class Center(Base): id, name, plz, ort, bundesland, email, …, pflegeberatung: bool, …</code></td>
+        <td>Beschreibt Pflegestellen, Leistungskatalog und n:m-Zuordnung als ORM-Modelle.</td>
+        <td><code>Center.services</code> verknüpft über <code>center_services</code> mit <code>Service</code>.</td>
       </tr>
       <tr>
-        <td><code>seed.py</code></td>
-        <td>Liest die CSV und befüllt die Tabelle.</td>
-        <td><code>csv.DictReader(f, delimiter=";")</code> → <code>db.add(Center(...))</code></td>
+        <td><code>db/import_centers.sql</code></td>
+        <td>Liest die CSV und befüllt die normalisierten Tabellen.</td>
+        <td>Wird manuell ausgeführt; nicht bei jedem App-Start.</td>
       </tr>
       <tr>
         <td><code>routers/centers.py</code></td>
@@ -498,21 +495,6 @@
       </tr>
     </table>
 
-    <h3>Warum diese beiden merkwürdigen Einstellungen?</h3>
-    <div class="box why">
-      <strong><code>StaticPool</code></strong>
-      Eine SQLite-Datenbank „im Speicher“ gehört normalerweise zu genau <em>einer</em>
-      Verbindung – jede neue Verbindung bekäme eine neue, leere Datenbank. <code>StaticPool</code>
-      sorgt dafür, dass alle Anfragen dieselbe eine Verbindung wiederverwenden und damit
-      dieselben Daten sehen.
-    </div>
-    <div class="box why">
-      <strong><code>check_same_thread=False</code></strong>
-      SQLite erlaubt eine Verbindung standardmäßig nur in dem Thread, der sie geöffnet hat.
-      FastAPI bearbeitet Anfragen aber in verschiedenen Threads. Die Einstellung hebt diese
-      Prüfung auf – unproblematisch, weil wir nur lesen.
-    </div>
-
     <h3>Was passiert bei einer Anfrage wie <code>/api/centers?bundesland=SN&amp;search=Dresden</code>?</h3>
     <ol>
       <li>FastAPI ruft <code>get_db()</code> auf → eine neue <strong>Session</strong> (Arbeitskontext) wird geöffnet.</li>
@@ -520,7 +502,7 @@
 <pre><code>stmt = select(Center)
 stmt = stmt.where(Center.bundesland == "SN")
 stmt = stmt.where(Center.name.ilike("%Dresden%") | Center.ort.ilike("%Dresden%") | Center.plz.ilike("%Dresden%"))</code></pre></li>
-      <li>Zwei SQL-Befehle gehen an SQLite: einmal <code>SELECT COUNT(*)</code> für „x Treffer
+      <li>Zwei SQL-Befehle gehen an PostgreSQL: einmal <code>SELECT COUNT(*)</code> für „x Treffer
         insgesamt“, einmal die eigentliche Liste mit <code>ORDER BY ort, name LIMIT 200 OFFSET 0</code>.</li>
       <li>Die Ergebniszeilen werden zu <code>Center</code>-Objekten, dann per Pydantic
         (<code>CenterOut</code>) in JSON umgewandelt.</li>
@@ -529,17 +511,13 @@ stmt = stmt.where(Center.name.ilike("%Dresden%") | Center.ort.ilike("%Dresden%")
 
     <div class="box">
       <strong>Warum SQL und nicht einfach eine Python-Liste filtern?</strong>
-      Mit ~4.000 Einträgen würde eine Liste auch funktionieren. Aber: SQLAlchemy abstrahiert die
-      Datenbank. Soll später ein Admin-Bereich Stellen bearbeiten können, wechselt man in
-      <code>database.py</code> nur die URL auf <code>postgresql://…</code>, ergänzt einen
-      Postgres-Container – und <code>models.py</code>, <code>routers/</code> bleiben unverändert.
+      SQLAlchemy führt die Abfragen gegen PostgreSQL aus; die API muss dafür keine
+      Datensätze erst in eine Python-Liste laden.
     </div>
 
-    <h3>Mehrere Worker = mehrere Datenbanken</h3>
-    <p>Gunicorn startet 2 Worker-Prozesse. Jeder lädt beim Start seine <em>eigene</em>
-      Kopie der CSV in seinen <em>eigenen</em> Arbeitsspeicher. Das ist unkritisch, weil beide
-      exakt dieselben Daten aus derselben Datei haben und nichts schreiben – es wäre aber der
-      erste Grund, auf eine gemeinsame Datenbank zu wechseln, sobald Daten geändert werden sollen.</p>
+    <h3>Mehrere Worker, eine gemeinsame Datenbank</h3>
+    <p>Gunicorn startet 2 Worker-Prozesse. Beide verbinden sich mit derselben PostgreSQL-
+      Datenbank und sehen dadurch denselben persistenten Datenbestand.</p>
 
     <h3>Die Keycloak-Datenbank ist eine andere</h3>
     <p>Nicht verwechseln: Der <code>keycloak-db</code>-Container (Postgres) gehört nur Keycloak

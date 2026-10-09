@@ -1,6 +1,6 @@
 # PostgreSQL-Datenbankschema
 
-Diese Dokumentation beschreibt das PostgreSQL-Init-Skript
+Diese Dokumentation beschreibt die PostgreSQL-Verbindung der App, das Init-Skript
 [`db/init/001_create_centers.sql`](../db/init/001_create_centers.sql), die
 Tabellen des Pflegestellenverzeichnisses und den CSV-Import.
 
@@ -18,8 +18,9 @@ separat aus einer CSV-Datei importiert.
 
 Das PostgreSQL-Docker-Image führt SQL-Dateien aus
 `/docker-entrypoint-initdb.d` automatisch nur aus, wenn das Datenbank-Volume
-zum ersten Mal mit einer leeren Datenbank initialisiert wird. Die Beispieldaten
-werden anschließend manuell mit dem CSV-Importskript eingespielt.
+zum ersten Mal mit einer leeren Datenbank initialisiert wird. Die App wartet
+beim Start auf eine erreichbare Datenbank samt `centers`-Tabelle, legt das
+Schema aber nicht selbst an und importiert keine CSV-Datei automatisch.
 
 ## Tabellen
 
@@ -85,11 +86,15 @@ die Suche nach allen Pflegestellen, die eine bestimmte Leistung anbieten.
 
 ## Datenbank starten und prüfen
 
-Im Projektverzeichnis startet dieser Befehl den PostgreSQL-Dienst:
+Im Projektverzeichnis startest du App und PostgreSQL gemeinsam:
 
 ```sh
-docker compose up -d app-db
+docker compose up -d --build app
 ```
+
+Compose verbindet die App intern mit `app-db:5432`. Das Passwort wird über
+`APP_DB_PASSWORD` aus `.env` als `PGPASSWORD` an die App gereicht. Die App
+wartet auf den erfolgreichen Healthcheck der Datenbank.
 
 Die Datenbank-Shell öffnest du mit:
 
@@ -107,7 +112,7 @@ SELECT id, name, plz, ort FROM centers ORDER BY id;
 
 ### CSV-Datei importieren
 
-Für die Beispieldatei [`tests/data/centers.csv`](../tests/data/centers.csv)
+Für die Quelldatei [`app/data/pflegestellen.csv`](../app/data/pflegestellen.csv)
 steht das Importskript [`db/import_centers.sql`](../db/import_centers.sql)
 bereit. Es importiert die CSV-Felder in `centers` und überträgt die
 Leistungs-Checkboxen sowie den Freitext `leistungen` in `services` und
@@ -117,7 +122,7 @@ Führe die folgenden Befehle im Projektverzeichnis aus. Die CSV wird zunächst
 in den Datenbankcontainer kopiert; anschließend importiert psql die Datei:
 
 ```sh
-docker compose cp tests/data/centers.csv app-db:/tmp/centers.csv
+docker compose cp app/data/pflegestellen.csv app-db:/tmp/pflegestellen.csv
 docker compose exec -T app-db psql -v ON_ERROR_STOP=1 -U pl2 -d pflegedb \
   < db/import_centers.sql
 ```
@@ -153,6 +158,7 @@ FROM services
 WHERE name IN ('Pflegeberatung', 'Wohnberatung');
 ```
 
-Die Webanwendung verwendet derzeit weiterhin SQLite im Arbeitsspeicher.
-PostgreSQL ist ein separat bereitgestellter Dienst und noch nicht mit der App
-verbunden.
+Die API verwendet PostgreSQL direkt. SQLite wird ausschließlich für die
+isolierten API-Tests genutzt. Ein CSV-Import aktualisiert Datensätze mit
+vorhandener ID und deren Angebotszuordnungen; Datensätze, die in der CSV fehlen,
+werden nicht automatisch gelöscht.

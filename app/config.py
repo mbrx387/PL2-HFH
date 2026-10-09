@@ -28,8 +28,8 @@ class Settings(BaseSettings):
     # API von einem separaten Frontend-Origin aus angesprochen wird).
     allowed_origins: str = "http://localhost:8000"
 
-    # Pfad zur Seed-Datei, aus der die In-Memory-Datenbank beim Start befuellt wird.
-    data_file: str = "app/data/pflegestellen.csv"
+    # SQLite ist der Default fuer isolierte Tests; Compose setzt PostgreSQL.
+    database_url: str = "sqlite://"
 
     # Schluessel zum Signieren des Session-Cookies (Login-Zustand). MUSS in
     # der Produktivumgebung ueberschrieben werden - siehe main.py, wo bei

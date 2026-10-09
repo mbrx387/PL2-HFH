@@ -1,8 +1,4 @@
-"""FastAPI-Einstiegspunkt.
-
-Startet die Anwendung, befuellt die In-Memory-DB aus der CSV-Seed-Datei und
-haengt Router, Templates und Static Files ein.
-"""
+"""FastAPI-Einstiegspunkt."""
 import logging
 from contextlib import asynccontextmanager
 
@@ -10,15 +6,15 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from sqlalchemy import text
 from starlette.middleware.sessions import SessionMiddleware
 
 from app.auth import LoginRequiredMiddleware
 from app.auth import router as auth_router
 from app.config import get_settings
-from app.database import Base, SessionLocal, engine
+from app.database import engine
 from app.routers import centers
 from app.security import SecurityHeadersMiddleware
-from app.seed import load_centers_from_csv
 
 settings = get_settings()
 
@@ -54,16 +50,12 @@ async def lifespan(app: FastAPI):
             "Entwicklung geeignet, NICHT fuer den Produktivbetrieb!"
         )
 
-    # Schema anlegen und In-Memory-DB aus der Seed-CSV befuellen.
-    Base.metadata.create_all(bind=engine)
-    db = SessionLocal()
-    try:
-        count = load_centers_from_csv(db, settings.data_file)
-        logger.info("%s Eintraege in der In-Memory-DB verfuegbar.", count)
-    finally:
-        db.close()
+    # Schema und Daten werden separat initialisiert/importiert; beim App-Start
+    # wird nur geprueft, dass die konfigurierte Datenbank erreichbar ist.
+    with engine.connect() as connection:
+        connection.execute(text("SELECT 1 FROM centers LIMIT 1"))
+    logger.info("Datenbankverbindung hergestellt.")
     yield
-    # Shutdown: nichts aufzuraeumen, da die DB rein im Arbeitsspeicher liegt.
 
 
 app = FastAPI(

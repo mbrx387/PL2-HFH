@@ -26,6 +26,15 @@ def test_filter_angebot(client):
     assert [c["id"] for c in data["items"]] == [30]
 
 
+def test_response_maps_normalized_services_to_api_fields(client):
+    data = client.get("/api/centers", params={"search": "Dresden"}).json()
+    center = data["items"][0]
+    assert center["pflegeberatung"] is True
+    assert center["angehoerigenberatung"] is True
+    assert center["demenzberatung"] is False
+    assert "Pflegeberatung" in center["leistungen"]
+
+
 def test_invalid_angebot_rejected(client):
     assert client.get("/api/centers", params={"angebot": "foo"}).status_code == 422
 
