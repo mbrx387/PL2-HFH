@@ -46,8 +46,9 @@ Secret eintragen, erst danach App + nginx starten.
      `localhost` vorkonfiguriert)
    - Demo-Nutzer `demo` / `demo1234` (Passwort muss beim ersten Login
      geändert werden)
-3. Admin-Konsole öffnen: läuft standardmäßig **nur auf `127.0.0.1:8080`**
-   (siehe `docker-compose.yml`), nicht öffentlich erreichbar. Lokal reicht
+3. Admin-Konsole öffnen: läuft **nur auf `127.0.0.1:8080`** (siehe
+   `docker-compose.yml`); öffentlich liefert nginx für `/idp/admin/` 404 und
+   `KC_HOSTNAME_ADMIN` zeigt auf die Tunnel-Adresse. Lokal reicht
    `http://localhost:8080/idp/admin/`; auf dem Server per SSH-Tunnel:
    `ssh -L 8080:localhost:8080 <user>@<server>`.
 4. Mit `admin` / dem gesetzten `KEYCLOAK_ADMIN_PASSWORD` einloggen, in den

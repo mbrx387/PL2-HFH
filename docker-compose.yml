@@ -93,6 +93,10 @@ services:
       # selbst generierten Links (Login-Formular, Discovery, iss-Claim).
       # Ohne Pfadanteil fehlt "/idp" in einigen Links.
       KC_HOSTNAME: ${KC_HOSTNAME:?set-in-.env}
+      # Admin-Konsole NUR ueber den SSH-Tunnel (localhost:8080). Ohne diese
+      # Option wuerde Keycloak wegen KC_HOSTNAME auch die Konsole auf die
+      # oeffentliche Domain umleiten; nginx blockt /idp/admin/ zusaetzlich.
+      KC_HOSTNAME_ADMIN: ${KC_HOSTNAME_ADMIN:-http://localhost:8080/idp}
       # Wird per ${...}-Platzhalter in keycloak/realm-export.json eingesetzt
       # (Redirect-/Logout-URIs des Clients).
       APP_PUBLIC_URL: ${APP_PUBLIC_URL:?set-in-.env}
