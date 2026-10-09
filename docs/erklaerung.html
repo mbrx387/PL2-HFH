@@ -101,6 +101,23 @@
     .badge.new { background: var(--ok); }
     .badge.fix { background: var(--warn); }
     .badge.sec { background: var(--bad); }
+    /* Flow-Chart */
+    .flow { display: flex; flex-direction: column; align-items: center; gap: 0; margin: 1rem 0; }
+    .flow .step {
+      width: 100%; max-width: 34rem;
+      border: 2px solid var(--accent); border-radius: 8px;
+      background: #fff; padding: .6rem 1rem; text-align: center;
+    }
+    .flow .step small { display: block; color: var(--muted); font-size: .85em; }
+    .flow .step.who-browser { border-color: #1f6feb; }
+    .flow .step.who-nginx { border-color: #6f42c1; }
+    .flow .step.who-app { border-color: #1a7f37; }
+    .flow .step.who-kc { border-color: #b35c00; }
+    .flow .step.decision { border-style: dashed; background: #fff8e6; }
+    .flow .arrow { color: var(--muted); font-size: 1.3rem; line-height: 1.6; }
+    .flow .arrow small { font-size: .7rem; vertical-align: middle; margin-left: .4rem; }
+    .legend span { display: inline-block; margin-right: 1rem; font-size: .9em; }
+    .legend i { display: inline-block; width: .9em; height: .9em; border: 2px solid; border-radius: 3px; vertical-align: middle; margin-right: .3em; }
     footer { text-align: center; color: var(--muted); padding: 2rem 1rem; font-size: .9rem; }
     details { margin: .6rem 0; }
     summary { cursor: pointer; font-weight: 600; color: var(--accent); }
@@ -113,8 +130,7 @@
   <p>
     Dieses Dokument erklärt für absolute Einsteiger:innen, <strong>was</strong> in diesem
     Projekt gebaut wurde, <strong>wie</strong> es technisch funktioniert und
-    <strong>warum</strong> die einzelnen Entscheidungen so getroffen wurden – inklusive der
-    zuletzt vorgenommenen Verbesserungen.
+    <strong>warum</strong> die einzelnen Entscheidungen so getroffen wurden.
   </p>
 </header>
 
@@ -128,8 +144,10 @@
       <li><a href="#ablauf">Was passiert bei einem Seitenaufruf?</a></li>
       <li><a href="#ordner">Wo liegt welcher Code?</a></li>
       <li><a href="#sicherheit">Sicherheit – einfach erklärt</a></li>
-      <li><a href="#verbesserungen">Die letzten Verbesserungen</a></li>
-      <li><a href="#deploy">Vom Code zum laufenden Server</a></li>
+      <li><a href="#flow">Flow-Chart: Der Weg zur Anwendung</a></li>
+      <li><a href="#cookies">Session-Cookies &amp; Co.</a></li>
+      <li><a href="#datenbank">Wie die Datenbank eingebunden ist</a></li>
+      <li><a href="#actions">Wie die GitHub Action funktioniert</a></li>
       <li><a href="#start">Selbst ausprobieren</a></li>
       <li><a href="#glossar">Glossar</a></li>
     </ol>
@@ -311,171 +329,299 @@
   </section>
 
   <!-- ============================================================ -->
-  <section id="verbesserungen">
-    <h2>6. Die letzten Verbesserungen – was, wie, warum</h2>
-    <p>Nach einer kritischen Bewertung des Repositories wurden folgende Punkte umgesetzt.
-      Legende: <span class="badge sec">Sicherheit</span>
-      <span class="badge fix">Korrektur</span> <span class="badge new">Neu</span></p>
+  <section id="flow">
+    <h2>6. Flow-Chart: Der Weg zur Anwendung</h2>
+    <p>So läuft ein Besuch ab – vom Eintippen der Adresse bis zur fertigen Liste. Farbe = wer
+      gerade „arbeitet“:</p>
+    <p class="legend">
+      <span><i style="border-color:#1f6feb"></i>Browser</span>
+      <span><i style="border-color:#6f42c1"></i>nginx</span>
+      <span><i style="border-color:#1a7f37"></i>App</span>
+      <span><i style="border-color:#b35c00"></i>Keycloak</span>
+      <span><i style="border-color:#b35c00;border-style:dashed"></i>Entscheidung</span>
+    </p>
 
-    <h3>6.1 Platzhalter-Passwörter werden erkannt <span class="badge sec">Sicherheit</span></h3>
-    <p><strong>Problem:</strong> Die Vorlage <code>.env.example</code> enthielt
-      <code>SECRET_KEY=change-me</code>. Die App prüfte aber nur auf einen <em>anderen</em>
-      Standardwert. Wer die Vorlage einfach kopierte, lief produktiv mit einem erratbaren
-      Schlüssel – damit könnte man Login-Cookies fälschen.</p>
-    <p><strong>Lösung:</strong> In <code>app/config.py</code> gibt es jetzt eine Liste bekannter
-      Platzhalter und eine Mindestlänge von 32 Zeichen. Im Produktivmodus verweigert die App
-      den Start, wenn der Schlüssel schwach ist. Auch ein Platzhalter als
-      <code>OIDC_CLIENT_SECRET</code> gilt als „nicht konfiguriert“.</p>
-<pre><code>PLACEHOLDER_VALUES = {"", "change-me", "insecure-dev-secret-change-me"}
-MIN_SECRET_KEY_LENGTH = 32
-
-@property
-def secret_key_is_weak(self) -> bool:
-    return is_placeholder(self.secret_key) or len(self.secret_key) &lt; 32</code></pre>
-
-    <h3>6.2 Keycloak produktionsreif <span class="badge sec">Sicherheit</span> <span class="badge fix">Korrektur</span></h3>
-    <p><strong>Problem:</strong> Keycloak lief im Entwicklungsmodus (<code>start-dev</code>) mit
-      einer Spielzeug-Datenbank im RAM – jeder Neustart löschte alle Benutzer. Hostname und
-      erlaubte Rücksprung-Adressen waren fest auf <code>localhost</code> verdrahtet, und genau
-      diese Konfiguration wurde automatisch auf den echten Server ausgerollt.</p>
-    <p><strong>Lösung</strong> in <code>docker-compose.yml</code>:</p>
-    <ul>
-      <li>Eigener <strong>Postgres-Container</strong> mit dauerhaftem Speicher (Volume) für Keycloak.</li>
-      <li><code>start</code> statt <code>start-dev</code> (umschaltbar per <code>KC_COMMAND</code> für lokal).</li>
-      <li>Hostname und App-Adresse kommen aus <code>.env</code>
-        (<code>KC_HOSTNAME</code>, <code>APP_PUBLIC_URL</code>). In
-        <code>keycloak/realm-export.json</code> steht nur noch
-        <code>${APP_PUBLIC_URL}/auth/callback</code> – Keycloak setzt den Wert beim Import
-        selbst ein. Keine <code>localhost</code>-Einträge mehr auf dem Server.</li>
-      <li>Veraltetes <code>KC_PROXY=edge</code> durch das aktuelle
-        <code>KC_PROXY_HEADERS=xforwarded</code> ersetzt; Image-Version exakt gepinnt.</li>
-    </ul>
-    <div class="box why">
-      <strong>Warum Umgebungsvariablen statt fester Werte?</strong>
-      Derselbe Code soll lokal (<code>https://localhost</code>) und auf dem Server
-      (<code>https://pflege-finder.example.org</code>) laufen. Alles, was sich zwischen den
-      Umgebungen unterscheidet, gehört in die <code>.env</code>, nicht in den Code.
+    <div class="flow">
+      <div class="step who-browser"><strong>1. Adresse eingeben</strong><small>https://pflege-finder.example.org</small></div>
+      <div class="arrow">▼</div>
+      <div class="step who-nginx"><strong>2. nginx nimmt an</strong><small>HTTP → HTTPS-Umleitung · TLS entschlüsseln · Rate-Limit prüfen</small></div>
+      <div class="arrow">▼<small>intern weiterreichen an app:8000</small></div>
+      <div class="step who-app"><strong>3. LoginRequiredMiddleware</strong><small>Liegt ein gültiges Session-Cookie mit „user“ vor?</small></div>
+      <div class="arrow">▼</div>
+      <div class="step decision"><strong>Eingeloggt?</strong><small>ja → weiter zu 9 &nbsp;|&nbsp; nein → weiter zu 4</small></div>
+      <div class="arrow">▼<small>nein</small></div>
+      <div class="step who-app"><strong>4. Umleitung zu /auth/login</strong><small>App merkt sich im Cookie, wohin es nach dem Login gehen soll (<code>next</code>)</small></div>
+      <div class="arrow">▼<small>Redirect (302)</small></div>
+      <div class="step who-kc"><strong>5. Keycloak-Login-Seite</strong><small>https://…/idp/realms/hfh-pflege/protocol/openid-connect/auth</small></div>
+      <div class="arrow">▼<small>Benutzername + Passwort</small></div>
+      <div class="step who-kc"><strong>6. Keycloak prüft die Anmeldung</strong><small>Passwort-Check, Brute-Force-Schutz, ggf. Passwort ändern</small></div>
+      <div class="arrow">▼<small>Redirect mit Einmal-Code</small></div>
+      <div class="step who-app"><strong>7. /auth/callback</strong><small>App tauscht den Code <em>direkt</em> bei Keycloak (internes Netz) gegen Token + Benutzerinfo</small></div>
+      <div class="arrow">▼</div>
+      <div class="step who-app"><strong>8. Session-Cookie setzen</strong><small>„user“ = { sub, email, name } – signiert mit SECRET_KEY</small></div>
+      <div class="arrow">▼<small>Redirect zum ursprünglichen Ziel</small></div>
+      <div class="step who-app"><strong>9. index.html ausliefern</strong><small>Server-gerendert mit „Angemeldet als …“</small></div>
+      <div class="arrow">▼</div>
+      <div class="step who-browser"><strong>10. JavaScript lädt Daten</strong><small>GET /api/bundeslaender · GET /api/centers?limit=200 (Cookie wird automatisch mitgeschickt)</small></div>
+      <div class="arrow">▼</div>
+      <div class="step who-app"><strong>11. API-Abfrage</strong><small>Middleware prüft erneut das Cookie → SQL-Abfrage → JSON zurück</small></div>
+      <div class="arrow">▼</div>
+      <div class="step who-browser"><strong>12. Liste anzeigen, filtern, auswählen</strong><small>Klick auf „E-Mail senden“ → <code>mailto:?bcc=…</code> öffnet das Mailprogramm</small></div>
     </div>
 
-    <h3>6.3 Automatische Tests und Lint als „Schranke“ <span class="badge new">Neu</span></h3>
-    <p><strong>Problem:</strong> Jeder Push auf <code>main</code> ging sofort und ungeprüft auf
-      den Server – ein Tippfehler hätte die Seite lahmgelegt.</p>
-    <p><strong>Lösung:</strong> Ein Ordner <code>tests/</code> mit 17 Pytest-Tests
-      (API-Filter, Seitengröße, Login-Umleitung, Fail-fast-Checks) und der Code-Prüfer
-      <code>ruff</code>. Beides läuft jetzt als eigener Job <em>vor</em> dem Bauen – und auch
-      für Pull Requests. Schlägt ein Test fehl, wird nichts deployt.</p>
-<pre><code># .github/workflows/deploy.yml (Auszug)
-jobs:
-  test:                      # 1) Prüfen
-    steps:
-      - run: ruff check .
-      - run: pytest -q
-  build-and-push:            # 2) Nur wenn Tests grün
-    needs: test
-  deploy:                    # 3) Nur wenn Build ok
-    needs: build-and-push</code></pre>
-    <details>
-      <summary>Wie funktionieren die Tests ohne echten Server?</summary>
-      <p>FastAPI bringt einen <code>TestClient</code> mit, der die App direkt im Speicher
-        aufruft – kein Docker, keine Netzwerkverbindung. Die Tests setzen Umgebungsvariablen
-        (z.&nbsp;B. <code>AUTH_ENABLED=false</code> oder eine kleine Test-CSV mit 3 Einträgen),
-        laden die App neu und prüfen die Antworten. Ein Test kontrolliert z.&nbsp;B., dass die
-        App mit <code>SECRET_KEY=change-me</code> im Produktivmodus <em>nicht</em> startet.</p>
-    </details>
+    <div class="box">
+      <strong>Welche Adressen sind ohne Login erreichbar?</strong>
+      Nur <code>/auth/*</code> (sonst käme niemand rein), <code>/static/*</code> (CSS/JS) und
+      <code>/healthz</code> (Docker-Healthcheck). Alles andere – auch die API-Doku unter
+      <code>/api/docs</code> – landet im Schritt „Eingeloggt?“.
+    </div>
 
-    <h3>6.4 Nachvollziehbare Deployments statt „latest“ <span class="badge fix">Korrektur</span></h3>
-    <p><strong>Problem:</strong> Der Server zog immer das Image mit dem Tag <code>latest</code>.
-      Man wusste nie genau, welche Version läuft, und ein Zurückrollen war schwierig.</p>
-    <p><strong>Lösung:</strong> Jeder Build wird zusätzlich mit dem Kürzel des Git-Commits
-      getaggt (z.&nbsp;B. <code>sha-1a2b3c4</code>). Der Deploy-Schritt schreibt diesen Tag als
-      <code>IMAGE_TAG</code> in die Server-<code>.env</code>. Rollback = alten Tag eintragen,
-      <code>docker compose up -d</code>.</p>
-
-    <h3>6.5 Stabile IDs für die Stellen <span class="badge fix">Korrektur</span></h3>
-    <p><strong>Problem:</strong> Die ID einer Stelle war einfach ihre Zeilennummer in der CSV.
-      Sortiert jemand die Datei um, bekommen alle Stellen neue IDs – Links und Auswahlen
-      zeigen plötzlich auf andere Einträge.</p>
-    <p><strong>Lösung:</strong> <code>app/seed.py</code> übernimmt jetzt die Spalte
-      <code>unsere_id</code> aus der CSV als Primärschlüssel. Außerdem leert der Import die
-      Tabelle vorher, damit er beliebig oft wiederholt werden kann (wichtig für Tests).</p>
-
-    <h3>6.6 Kleinere Code-Korrekturen in der API <span class="badge fix">Korrektur</span></h3>
-    <ul>
-      <li><strong>Ungültiger Filter wird abgelehnt:</strong> <code>?angebot=foo</code> wurde
-        bisher stillschweigend ignoriert. Jetzt ist der Parameter als feste Auswahlliste
-        (<code>Literal</code>) definiert → Antwort <code>422</code> mit Fehlermeldung, und die
-        erlaubten Werte erscheinen automatisch in der API-Doku.</li>
-      <li><strong>Suche nach <code>%</code> oder <code>_</code>:</strong> Diese Zeichen sind in
-        SQL Platzhalter („beliebig viele Zeichen“). Sie werden jetzt maskiert, sodass wirklich
-        nach dem Zeichen gesucht wird.</li>
-      <li><strong>Zählen statt alles laden:</strong> Für „x von y Treffern“ wurden bisher alle
-        Treffer aus der Datenbank geholt und dann gezählt. Jetzt zählt die Datenbank selbst
-        (<code>COUNT(*)</code>) – schneller und weniger Speicher.</li>
-    </ul>
-
-    <h3>6.7 Strengere Sicherheits-Header <span class="badge sec">Sicherheit</span></h3>
-    <p>Die Content-Security-Policy erlaubte „inline“-CSS, obwohl keines verwendet wird. Die
-      Ausnahme wurde entfernt und <code>frame-ancestors 'none'</code> ergänzt (moderne Form von
-      „nicht in fremde Seiten einbetten“).</p>
-
-    <h3>6.8 nginx: moderne TLS-Einstellungen <span class="badge sec">Sicherheit</span></h3>
-    <p>Die Verschlüsselungsverfahren folgen jetzt der empfohlenen „Mozilla
-      Intermediate“-Liste; TLS-Sitzungen werden zwischengespeichert (schnellere Folgeaufrufe).
-      Für den Keycloak-Pfad <code>/idp/</code> wurde das Rate-Limit gelockert, weil die
-      Admin-Oberfläche viele Dateien auf einmal lädt und sonst ausgebremst wurde.</p>
-
-    <h3>6.9 Aufgeräumt <span class="badge fix">Korrektur</span></h3>
-    <ul>
-      <li>Testdateien (<code>Test.txt</code>, <code>Test123.txt</code>) und eine 9&nbsp;MB
-        große Kopie der Daten (<code>pflegestellen.json</code>, Root-<code>pflegestellen.csv</code>)
-        entfernt. Es gibt jetzt genau <strong>eine</strong> Datenquelle:
-        <code>app/data/pflegestellen.csv</code>.</li>
-      <li>Veraltete Python-Importe ersetzt (<code>uvicorn-worker</code>-Paket), doppelter
-        Healthcheck entfernt.</li>
-      <li>Kommentare und README/ROADMAP, die noch „Login kommt später“ sagten, aktualisiert.</li>
-      <li><strong>Dependabot</strong> eingerichtet: GitHub schlägt automatisch Updates für
-        Python-Pakete, Docker-Images und Actions vor.</li>
-    </ul>
-
-    <div class="box warn">
-      <strong>Noch offen (bewusst nicht umgesetzt)</strong>
-      Demo-Benutzer <code>demo</code> auf dem Server löschen · Impressum &amp;
-      Datenschutzerklärung · Rollen/Rechte (aktuell darf jeder Eingeloggte alles) ·
-      GitHub-Actions auf feste Commit-Versionen pinnen. Alles in
-      <code>docs/ROADMAP.md</code> vermerkt.
+    <h3>Und der Logout?</h3>
+    <div class="flow">
+      <div class="step who-browser"><strong>Klick auf „Abmelden“</strong><small>/auth/logout</small></div>
+      <div class="arrow">▼</div>
+      <div class="step who-app"><strong>App löscht das Session-Cookie</strong><small>Lokale Sitzung beendet</small></div>
+      <div class="arrow">▼<small>Redirect mit id_token_hint</small></div>
+      <div class="step who-kc"><strong>Keycloak beendet seine Sitzung</strong><small>Sonst wäre man beim nächsten Besuch sofort wieder „still“ eingeloggt (SSO)</small></div>
+      <div class="arrow">▼</div>
+      <div class="step who-browser"><strong>Zurück auf die Startseite</strong><small>→ Schritt 3, Login nötig</small></div>
     </div>
   </section>
 
   <!-- ============================================================ -->
-  <section id="deploy">
-    <h2>7. Vom Code zum laufenden Server</h2>
-    <p>Wird Code in den Branch <code>main</code> gemerged, passiert vollautomatisch:</p>
-    <div class="diagram">git push main
-   │
-   ▼
-[1] test ──────── ruff + pytest           ✗ Fehler? → Stopp, nichts passiert
-   │ ✓
-   ▼
-[2] build-and-push ── Docker-Image bauen, nach GHCR hochladen
-   │                  (Tags: latest + sha-&lt;commit&gt;)
-   ▼
-[3] deploy ────── per SSH auf den Server:
-                  git pull · IMAGE_TAG in .env schreiben ·
-                  docker compose pull &amp; up -d
-   │
-   ▼
-[4] health check ─ 12× https://localhost/healthz abfragen
-                  ✗ nach 60 s nicht gesund? → Logs ausgeben, Job rot</div>
+  <section id="cookies">
+    <h2>7. Session-Cookies &amp; Co. – einfach erklärt</h2>
+
+    <h3>Das Grundproblem: HTTP ist vergesslich</h3>
+    <p>Jede Anfrage an den Server ist für sich allein – der Server weiß beim zweiten Klick
+      nicht mehr, dass du dich beim ersten eingeloggt hast. Damit das trotzdem funktioniert,
+      gibt der Server dem Browser ein <strong>Cookie</strong>: ein kleines Stück Text, das der
+      Browser bei <em>jeder</em> weiteren Anfrage an dieselbe Website automatisch mitschickt.</p>
+
+    <h3>Was steht in unserem Cookie?</h3>
+    <p>Das Cookie heißt <code>session</code> und enthält ein kleines JSON-Objekt:</p>
+<pre><code>{
+  "user": { "sub": "3f1c…", "email": "demo@example.org", "name": "Demo Nutzer" },
+  "id_token": "eyJhbGciOi…"      // für den Logout bei Keycloak
+}</code></pre>
+    <p>Dieser Inhalt wird <strong>Base64-kodiert und signiert</strong> – nicht verschlüsselt.
+      Das heißt: Man kann ihn theoretisch lesen (es stehen auch keine Geheimnisse drin), aber
+      man kann ihn <strong>nicht verändern</strong>, ohne dass die Signatur ungültig wird.</p>
+
     <div class="box why">
-      <strong>Warum ein fertiges Image statt auf dem Server zu bauen?</strong>
-      Das Image wird <em>einmal</em> gebaut und getestet; der Server führt exakt dieses aus.
-      So laufen lokal, in CI und produktiv garantiert dieselben Bytes.
+      <strong>Was ist eine Signatur und wozu der <code>SECRET_KEY</code>?</strong>
+      Der Server berechnet aus Cookie-Inhalt + <code>SECRET_KEY</code> eine Prüfsumme (HMAC) und
+      hängt sie an. Bei jeder Anfrage rechnet er sie neu und vergleicht. Wer den Inhalt
+      manipuliert (z.&nbsp;B. <code>"email": "admin@…"</code>), hat die passende Prüfsumme nicht
+      – das Cookie wird verworfen, man gilt als nicht eingeloggt. Deshalb muss der
+      <code>SECRET_KEY</code> geheim, lang und zufällig sein und darf kein Platzhalter wie
+      <code>change-me</code> bleiben: Wer ihn kennt, könnte sich jedes beliebige Cookie
+      selbst ausstellen.
     </div>
+
+    <h3>Die Schutz-Flags am Cookie</h3>
+    <table>
+      <tr><th>Flag</th><th>Bedeutung</th><th>Schützt vor</th></tr>
+      <tr><td><code>HttpOnly</code></td><td>JavaScript im Browser darf das Cookie nicht lesen.</td><td>Diebstahl des Cookies durch eingeschleustes Skript (XSS).</td></tr>
+      <tr><td><code>Secure</code></td><td>Wird nur über HTTPS gesendet (im Produktivmodus aktiv).</td><td>Mitlesen im unverschlüsselten WLAN.</td></tr>
+      <tr><td><code>SameSite=lax</code></td><td>Wird bei Anfragen, die eine <em>fremde</em> Seite auslöst, meist nicht mitgeschickt.</td><td>„Cross-Site Request Forgery“ – fremde Seiten, die in deinem Namen Aktionen auslösen.</td></tr>
+      <tr><td><code>Max-Age=28800</code></td><td>Läuft nach 8 Stunden automatisch ab.</td><td>Ewig gültige Logins auf fremden Rechnern.</td></tr>
+    </table>
+
+    <h3>Warum kein serverseitiger Session-Speicher?</h3>
+    <p>Viele Anwendungen speichern nur eine zufällige ID im Cookie und den Rest in einer
+      Datenbank (Redis o.&nbsp;ä.). Hier liegt <em>alles</em> im Cookie. Vorteil: Die App
+      braucht keinen zusätzlichen Speicher, bleibt zustandslos und ein Neustart loggt niemanden
+      aus. Nachteil: Eine einzelne Sitzung lässt sich nicht serverseitig „abschießen“ – nur über
+      Keycloak (dort „Sessions beenden“) oder durch Ändern des <code>SECRET_KEY</code>, was alle
+      Nutzer:innen gleichzeitig ausloggt.</p>
+
+    <h3>Drei Dinge, die oft verwechselt werden</h3>
+    <dl class="glossar">
+      <dt>Session-Cookie (unseres)</dt>
+      <dd>Vom <em>App</em>-Server gesetzt, gilt für <code>pflege-finder.example.org</code>.
+        Sagt der App: „Diese Person ist eingeloggt.“</dd>
+      <dt>Keycloak-Cookies</dt>
+      <dd>Von Keycloak unter <code>/idp/…</code> gesetzt. Sagen Keycloak: „Diese Person hat
+        sich schon angemeldet“ – deshalb klappt ein zweiter Login ohne erneute
+        Passworteingabe (Single Sign-On).</dd>
+      <dt>Tokens (ID-Token, Access-Token)</dt>
+      <dd>Signierte Datenpakete, die Keycloak <em>der App</em> gibt (Schritt 7 im Flow-Chart).
+        Sie landen nie im Browser-JavaScript; die App liest daraus Name/E-Mail und merkt sich
+        nur den <code>id_token</code> für den sauberen Logout.</dd>
+    </dl>
+  </section>
+
+  <!-- ============================================================ -->
+  <section id="datenbank">
+    <h2>8. Wie genau die Datenbank eingebunden ist</h2>
+
+    <h3>Die Idee in einem Satz</h3>
+    <p>Die CSV-Datei im Repository ist die Wahrheit; beim Start wird sie in eine
+      SQLite-Datenbank <em>im Arbeitsspeicher</em> geladen, und die API fragt diese per SQL ab.</p>
+
+    <div class="diagram">app/data/pflegestellen.csv          (versioniert in Git, ~4.090 Zeilen)
+          │
+          │  beim Containerstart (lifespan in main.py)
+          ▼
+   seed.py: CSV lesen ─► Zeile für Zeile Center(...)-Objekte ─► db.commit()
+          │
+          ▼
+   SQLite ":memory:"  ─ Tabelle "centers" mit Indizes auf name, plz, ort, bundesland
+          ▲
+          │  pro Anfrage: Session öffnen → SELECT … → Session schließen
+          │
+   routers/centers.py  (/api/centers, /api/bundeslaender)</div>
+
+    <h3>Die vier beteiligten Dateien</h3>
+    <table>
+      <tr><th>Datei</th><th>Aufgabe</th><th>Kernstück</th></tr>
+      <tr>
+        <td><code>database.py</code></td>
+        <td>Erzeugt die Verbindung (<em>Engine</em>) und die Session-Fabrik.</td>
+        <td><code>create_engine("sqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False})</code></td>
+      </tr>
+      <tr>
+        <td><code>models.py</code></td>
+        <td>Beschreibt die Tabelle als Python-Klasse (<em>ORM</em>).</td>
+        <td><code>class Center(Base): id, name, plz, ort, bundesland, email, …, pflegeberatung: bool, …</code></td>
+      </tr>
+      <tr>
+        <td><code>seed.py</code></td>
+        <td>Liest die CSV und befüllt die Tabelle.</td>
+        <td><code>csv.DictReader(f, delimiter=";")</code> → <code>db.add(Center(...))</code></td>
+      </tr>
+      <tr>
+        <td><code>routers/centers.py</code></td>
+        <td>Baut aus den Filter-Parametern eine SQL-Abfrage.</td>
+        <td><code>select(Center).where(…).order_by(…).offset(…).limit(…)</code></td>
+      </tr>
+    </table>
+
+    <h3>Warum diese beiden merkwürdigen Einstellungen?</h3>
+    <div class="box why">
+      <strong><code>StaticPool</code></strong>
+      Eine SQLite-Datenbank „im Speicher“ gehört normalerweise zu genau <em>einer</em>
+      Verbindung – jede neue Verbindung bekäme eine neue, leere Datenbank. <code>StaticPool</code>
+      sorgt dafür, dass alle Anfragen dieselbe eine Verbindung wiederverwenden und damit
+      dieselben Daten sehen.
+    </div>
+    <div class="box why">
+      <strong><code>check_same_thread=False</code></strong>
+      SQLite erlaubt eine Verbindung standardmäßig nur in dem Thread, der sie geöffnet hat.
+      FastAPI bearbeitet Anfragen aber in verschiedenen Threads. Die Einstellung hebt diese
+      Prüfung auf – unproblematisch, weil wir nur lesen.
+    </div>
+
+    <h3>Was passiert bei einer Anfrage wie <code>/api/centers?bundesland=SN&amp;search=Dresden</code>?</h3>
+    <ol>
+      <li>FastAPI ruft <code>get_db()</code> auf → eine neue <strong>Session</strong> (Arbeitskontext) wird geöffnet.</li>
+      <li>Die Abfrage wird Stück für Stück zusammengebaut:
+<pre><code>stmt = select(Center)
+stmt = stmt.where(Center.bundesland == "SN")
+stmt = stmt.where(Center.name.ilike("%Dresden%") | Center.ort.ilike("%Dresden%") | Center.plz.ilike("%Dresden%"))</code></pre></li>
+      <li>Zwei SQL-Befehle gehen an SQLite: einmal <code>SELECT COUNT(*)</code> für „x Treffer
+        insgesamt“, einmal die eigentliche Liste mit <code>ORDER BY ort, name LIMIT 200 OFFSET 0</code>.</li>
+      <li>Die Ergebniszeilen werden zu <code>Center</code>-Objekten, dann per Pydantic
+        (<code>CenterOut</code>) in JSON umgewandelt.</li>
+      <li>Die Session wird geschlossen (<code>finally: db.close()</code>) – auch bei Fehlern.</li>
+    </ol>
+
+    <div class="box">
+      <strong>Warum SQL und nicht einfach eine Python-Liste filtern?</strong>
+      Mit ~4.000 Einträgen würde eine Liste auch funktionieren. Aber: SQLAlchemy abstrahiert die
+      Datenbank. Soll später ein Admin-Bereich Stellen bearbeiten können, wechselt man in
+      <code>database.py</code> nur die URL auf <code>postgresql://…</code>, ergänzt einen
+      Postgres-Container – und <code>models.py</code>, <code>routers/</code> bleiben unverändert.
+    </div>
+
+    <h3>Mehrere Worker = mehrere Datenbanken</h3>
+    <p>Gunicorn startet 2 Worker-Prozesse. Jeder lädt beim Start seine <em>eigene</em>
+      Kopie der CSV in seinen <em>eigenen</em> Arbeitsspeicher. Das ist unkritisch, weil beide
+      exakt dieselben Daten aus derselben Datei haben und nichts schreiben – es wäre aber der
+      erste Grund, auf eine gemeinsame Datenbank zu wechseln, sobald Daten geändert werden sollen.</p>
+
+    <h3>Die Keycloak-Datenbank ist eine andere</h3>
+    <p>Nicht verwechseln: Der <code>keycloak-db</code>-Container (Postgres) gehört nur Keycloak
+      und speichert Benutzerkonten dauerhaft auf einem Docker-Volume. Die App greift darauf nie
+      zu.</p>
+  </section>
+
+  <!-- ============================================================ -->
+  <section id="actions">
+    <h2>9. Wie die GitHub Action funktioniert</h2>
+
+    <h3>Was ist eine GitHub Action?</h3>
+    <p>GitHub kann bei bestimmten Ereignissen (z.&nbsp;B. „jemand hat auf <code>main</code>
+      gepusht“) automatisch Befehle auf einem Leih-Rechner („Runner“) ausführen. Was genau
+      passieren soll, steht in einer YAML-Datei unter <code>.github/workflows/</code>. Unsere
+      heißt <code>deploy.yml</code>.</p>
+
+    <h3>Wann startet sie?</h3>
+<pre><code>on:
+  push:
+    branches: [main]   # jeder Merge/Push auf main
+  pull_request:        # jeder PR – aber nur der Test-Job (siehe unten)</code></pre>
+
+    <h3>Die drei Jobs und ihre Reihenfolge</h3>
+    <div class="flow">
+      <div class="step who-browser"><strong>Ereignis</strong><small>push auf main oder Pull Request</small></div>
+      <div class="arrow">▼</div>
+      <div class="step who-app"><strong>Job 1: test</strong><small>Python 3.12 einrichten · <code>pip install</code> · <code>ruff check .</code> · <code>pytest -q</code></small></div>
+      <div class="arrow">▼</div>
+      <div class="step decision"><strong>Tests grün <em>und</em> Ereignis = push auf main?</strong><small>nein → Ende (PRs stoppen hier bewusst)</small></div>
+      <div class="arrow">▼<small>ja</small></div>
+      <div class="step who-nginx"><strong>Job 2: build-and-push</strong><small>Docker-Image aus <code>app/Dockerfile</code> bauen · bei GHCR anmelden · hochladen als <code>:latest</code> und <code>:sha-&lt;commit&gt;</code></small></div>
+      <div class="arrow">▼<small>needs: build-and-push</small></div>
+      <div class="step who-kc"><strong>Job 3: deploy</strong><small>Per SSH auf den Ubuntu-Server · <code>git reset --hard origin/main</code> · <code>IMAGE_TAG=sha-…</code> in <code>.env</code> schreiben · <code>docker compose pull &amp;&amp; up -d</code></small></div>
+      <div class="arrow">▼</div>
+      <div class="step who-kc"><strong>Health-Check</strong><small>bis zu 12× alle 5 s <code>curl https://localhost/healthz</code> · bei Misserfolg: <code>docker compose logs</code> ausgeben, Job rot</small></div>
+    </div>
+
+    <h3>Die wichtigsten Zeilen, erklärt</h3>
+    <table>
+      <tr><th>Auszug</th><th>Was es bedeutet</th></tr>
+      <tr><td><code>needs: test</code></td><td>Job 2 wartet auf Job 1 und läuft nur, wenn der erfolgreich war. So wird nie ungetesteter Code gebaut.</td></tr>
+      <tr><td><code>if: github.event_name == 'push'</code></td><td>Für Pull Requests wird nur getestet, nicht gebaut oder deployt – ein PR darf den Server nicht anfassen.</td></tr>
+      <tr><td><code>permissions: packages: write</code></td><td>Der Job darf Images in die GitHub Container Registry (GHCR) hochladen – und sonst nichts.</td></tr>
+      <tr><td><code>secrets.GITHUB_TOKEN</code></td><td>Von GitHub automatisch erzeugter, kurzlebiger Schlüssel für diesen einen Lauf. Kein manuell gepflegtes Passwort nötig.</td></tr>
+      <tr><td><code>secrets.SSH_HOST / SSH_USER / SSH_PRIVATE_KEY</code></td><td>Zugangsdaten zum Server, in GitHub unter Settings → Secrets hinterlegt. Sie erscheinen nie im Code oder in Logs.</td></tr>
+      <tr><td><code>cache-from/cache-to: type=gha</code></td><td>Docker-Schichten werden zwischen Läufen zwischengespeichert – unveränderte Teile (z.&nbsp;B. installierte Pakete) werden nicht jedes Mal neu gebaut.</td></tr>
+      <tr><td><code>type=sha</code> (metadata-action)</td><td>Erzeugt den Tag <code>sha-1a2b3c4</code> aus dem Commit. Damit ist jedes Image eindeutig einem Code-Stand zuzuordnen.</td></tr>
+      <tr><td><code>sed -i '/^IMAGE_TAG=/d' .env; echo "IMAGE_TAG=…" &gt;&gt; .env</code></td><td>Trägt auf dem Server den exakten Tag ein, den <code>docker-compose.yml</code> über <code>${IMAGE_TAG}</code> liest. Rollback = alten Tag eintragen, <code>docker compose up -d</code>.</td></tr>
+      <tr><td><code>git checkout -f main</code> / <code>reset --hard</code></td><td>Holt <code>docker-compose.yml</code>, nginx-Config usw. auf den Server. Die <code>.env</code> ist nicht in Git und bleibt unberührt.</td></tr>
+    </table>
+
+    <div class="box why">
+      <strong>Warum wird das Image auf GitHub gebaut und nicht auf dem Server?</strong>
+      Das Image entsteht <em>einmal</em>, nach bestandenen Tests, und der Server führt exakt
+      dieses aus. Würde der Server selbst bauen, könnten Unterschiede (andere Paketversionen,
+      halbfertiger Build bei Abbruch) zu „bei mir geht's aber“-Problemen führen.
+    </div>
+
+    <div class="box">
+      <strong>Was passiert, wenn der Health-Check rot wird?</strong>
+      Der neue Container läuft dann bereits – der Workflow macht <em>kein</em> automatisches
+      Rollback. Er gibt <code>docker compose ps</code> und die letzten Logs aus, damit man die
+      Ursache sieht. Manueller Rollback: in der Server-<code>.env</code> den vorherigen
+      <code>IMAGE_TAG</code> eintragen und <code>docker compose up -d</code>.
+    </div>
+
+    <h3>Zwei weitere, kleinere Automatiken</h3>
+    <ul>
+      <li><strong><code>.github/dependabot.yml</code></strong> – kein Workflow, sondern eine
+        Konfiguration: GitHub prüft wöchentlich Python-Pakete, Docker-Images und Actions auf
+        neue Versionen und öffnet Pull Requests. Diese laufen dann automatisch durch den
+        <code>test</code>-Job.</li>
+      <li><strong><code>dependency-graph.yml</code></strong> – meldet alle erkannten
+        Abhängigkeiten (auch Docker-Images) an GitHubs Dependency Graph, damit Sicherheitslücken
+        in Paketen als Alerts sichtbar werden.</li>
+    </ul>
   </section>
 
   <!-- ============================================================ -->
   <section id="start">
-    <h2>8. Selbst ausprobieren</h2>
+    <h2>10. Selbst ausprobieren</h2>
     <h3>Nur Backend, ohne Docker und ohne Login (schnellster Weg)</h3>
 <pre><code>python3 -m venv .venv &amp;&amp; source .venv/bin/activate
 pip install -r app/requirements.txt -r requirements-dev.txt
@@ -494,7 +640,7 @@ AUTH_ENABLED=false uvicorn app.main:app --reload
 
   <!-- ============================================================ -->
   <section id="glossar">
-    <h2>9. Glossar</h2>
+    <h2>11. Glossar</h2>
     <dl class="glossar">
       <dt>API</dt>
       <dd>Eine Schnittstelle, über die Programme (hier: das JavaScript im Browser) Daten

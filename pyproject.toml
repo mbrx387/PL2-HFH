@@ -10,3 +10,5 @@ ignore = ["B008"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Repo-Root in sys.path, damit "import app" auch bei direktem `pytest`-Aufruf klappt.
+pythonpath = ["."]
