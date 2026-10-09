@@ -91,12 +91,41 @@ jobs:
             git fetch origin main
             git checkout -f main
             git reset --hard origin/main
+            # Pflichtvariablen der Server-.env pruefen, BEVOR docker compose
+            # mit einer kryptischen Meldung abbricht. Platzhalter zaehlen als
+            # fehlend. Zertifikate pruefen, weil nginx ohne sie nicht startet.
+            if [ ! -f .env ]; then
+              echo "::error::/opt/pl2-hfh/.env fehlt - aus .env.example anlegen."
+              exit 1
+            fi
+            missing=""
+            for key in SECRET_KEY APP_PUBLIC_URL ALLOWED_ORIGINS \
+                       OIDC_ISSUER OIDC_CLIENT_ID OIDC_CLIENT_SECRET OIDC_ISSUER_INTERNAL \
+                       KEYCLOAK_ADMIN_PASSWORD KEYCLOAK_DB_PASSWORD KC_HOSTNAME; do
+              value="$(grep -E "^${key}=" .env | tail -n1 | cut -d= -f2-)"
+              case "$value" in
+                ""|change-me|*example.org*) missing="$missing $key" ;;
+              esac
+            done
+            if [ -n "$missing" ]; then
+              echo "::error::In /opt/pl2-hfh/.env fehlen oder sind Platzhalter:$missing"
+              echo "Siehe .env.example und docs/ROADMAP.md, Abschnitt 1.1."
+              exit 1
+            fi
+            for cert in nginx/certs/fullchain.pem nginx/certs/privkey.pem; do
+              if [ ! -s "$cert" ]; then
+                echo "::error::$cert fehlt - nginx startet ohne TLS-Zertifikat nicht."
+                exit 1
+              fi
+            done
             # Exakten Build dieses Commits deployen (statt "latest"); der Tag
             # bleibt in .env stehen, damit spaetere manuelle `compose up`
             # dieselbe Version nutzen. Rollback = alten Tag eintragen.
             IMAGE_TAG="sha-$(echo '${{ github.sha }}' | cut -c1-7)"
             sed -i '/^IMAGE_TAG=/d' .env
             echo "IMAGE_TAG=${IMAGE_TAG}" >> .env
+            # Compose-Konfiguration validieren (faengt z.B. Syntaxfehler ab).
+            docker compose --profile sso config --quiet
             # Nur nötig, falls das GHCR-Package NICHT public ist:
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
             docker compose --profile sso pull
