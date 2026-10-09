@@ -52,6 +52,9 @@ PL2-HFH/
 │   ├── Dockerfile
 │   └── requirements.txt
 ├── keycloak/realm-export.json    # Realm/Client/Demo-User, automatischer Import (URLs aus APP_PUBLIC_URL)
+├── db/
+│   ├── init/001_create_centers.sql          # Grundschema für eine neue PostgreSQL-Datenbank
+│   └── migrations/002_normalize_center_services.sql # Angebote normalisieren
 ├── nginx/
 │   ├── nginx.conf
 │   └── conf.d/default.conf       # TLS-Terminierung, Reverse Proxy, Rate-Limit, /idp/-Route (Keycloak)
@@ -78,6 +81,28 @@ bewusst versioniert (statt z.B. in einem Volume abgelegt): Sie ist die
 Containerstart neu aufgebaut wird. Das macht App-Instanzen zustandslos und
 austauschbar und macht "Datenverlust bei Neustart" (typisches Risiko einer
 In-Memory-DB) irrelevant.
+
+### PostgreSQL-Schema (vorbereitet, noch nicht von der App verwendet)
+
+Der Compose-Service `app-db` stellt lokal eine persistente PostgreSQL-Datenbank
+bereit. Das Schema besteht aus `centers` (Stammdaten), `services`
+(Angebotskatalog) und `center_services` (Zuordnung). Die Angebotsdaten liegen
+nicht mehr als einzelne Boolean-Spalten oder Freitext in `centers`.
+
+`db/init/001_create_centers.sql` wird vom PostgreSQL-Image nur beim ersten
+Initialisieren eines leeren Datenbank-Volumes automatisch ausgeführt. Für ein
+bereits angelegtes Volume gibt es die einmalig anzuwendende Migration
+`db/migrations/002_normalize_center_services.sql`. Sie überträgt die alten
+Angebotsfelder in Katalog und Zuordnung, bevor sie die alten Spalten entfernt:
+
+```sh
+docker compose exec -T app-db psql -v ON_ERROR_STOP=1 -U pl2 -d pflegedb \
+  < db/migrations/002_normalize_center_services.sql
+```
+
+Die Anwendung verwendet derzeit weiterhin die SQLite-In-Memory-Datenbank und
+lädt ihre Demo-Daten aus der CSV-Datei. Eine Verbindung von App zu PostgreSQL
+ist ein separater, späterer Schritt.
 
 ## 4. Hosting-Konzept
 

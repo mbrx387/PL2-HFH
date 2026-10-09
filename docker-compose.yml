@@ -107,8 +107,27 @@ services:
     networks:
       - internal
 
+  app-db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: pflegedb
+      POSTGRES_USER: pl2
+      POSTGRES_PASSWORD: ${APP_DB_PASSWORD:?set-in-.env}
+    volumes:
+      - app-db-data:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pl2 -d pflegedb"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - internal
+
 volumes:
   keycloak-db-data:
+  app-db-data:
 
 networks:
   internal:
