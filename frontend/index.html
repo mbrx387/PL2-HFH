@@ -1,80 +1,781 @@
+
 <!DOCTYPE html>
 <html lang="de">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Pflegezentren-Finder (Vorschau)</title>
-  <link rel="stylesheet" href="style.css" />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>PflegeKompass | Einrichtungsverwaltung</title>
+
+    <meta
+        name="description"
+        content="Verwaltung, Suche und Kommunikation mit Pflegeeinrichtungen."
+    >
+
+    <link rel="stylesheet" href="style.css">
+
+    <script type="module" src="main.js"></script>
 </head>
+
 <body>
-  <header class="topbar">
-    <div class="topbar-row">
-      <div>
-        <h1>Pflegezentren-Finder</h1>
-        <p class="subtitle">Pflege- und Beratungsstellen in Deutschland finden und per E-Mail kontaktieren</p>
-      </div>
-      <!-- AP6-FEHLT: Navigation (Historie, Dashboard, Pflege) erst anlegen, wenn die Seiten existieren.
-         Sichtbarkeit dann über data-recht (permissions.js), Durchsetzung im Backend (AP1). -->
-      <div class="user-info">
-        <span>Angemeldet als {{ user.name or user.email or user.sub }}</span>
-        <a href="/auth/logout">Abmelden</a>
-      </div>
-      
+    <div class="workspace">
+
+        <!-- Linke Navigation -->
+        <aside class="sidebar">
+            <div class="brand">
+                <div class="brand-icon">P</div>
+                <div>
+                    <span class="brand-name">PflegeKompass</span>
+                    <span class="brand-subtitle">Verwaltungsportal</span>
+                </div>
+            </div>
+
+            <p class="nav-heading">ARBEITSBEREICH</p>
+
+            <nav class="sidebar-nav" aria-label="Hauptnavigation">
+                <a href="#dashboard" class="nav-link" data-view="dashboard">
+                    <span class="nav-icon">⌂</span>
+                    Übersicht
+                </a>
+
+                <a
+                    href="#einrichtungen"
+                    class="nav-link active"
+                    data-view="einrichtungen"
+                    aria-current="page"
+                >
+                    <span class="nav-icon">▤</span>
+                    Einrichtungen
+                </a>
+
+                <a href="#datenpflege" class="nav-link" data-view="datenpflege">
+                    <span class="nav-icon">＋</span>
+                    Datenpflege
+                </a>
+
+                <a href="#email" class="nav-link" data-view="email">
+                    <span class="nav-icon">✉</span>
+                    E-Mail-Zentrale
+                </a>
+
+                <a href="#historie" class="nav-link" data-view="historie">
+                    <span class="nav-icon">◷</span>
+                    Versandhistorie
+                </a>
+            </nav>
+
+            <div class="sidebar-footer">
+                <div class="status-indicator"></div>
+                <div>
+                    <strong>ProjektLab 2</strong>
+                    <span>Frontend · AP 6</span>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Hauptbereich -->
+        <main class="workspace-main">
+
+            <!-- Kopfbereich -->
+            <header class="workspace-header">
+                <div>
+                    <p class="breadcrumb">
+                        PflegeKompass / <span id="breadcrumb-current">Einrichtungen</span>
+                    </p>
+                    <h1 id="page-title">Einrichtungen</h1>
+                    <p class="page-description" id="page-description">
+                        Pflegeeinrichtungen finden, filtern und verwalten.
+                    </p>
+                </div>
+
+                <div class="header-actions">
+                    <span class="user-role">Projektverwaltung</span>
+                    <div class="user-avatar" aria-label="Benutzerkonto">U</div>
+                </div>
+            </header>
+
+            <!-- ====================================== -->
+            <!-- ANSICHT 1: EINRICHTUNGEN               -->
+            <!-- ====================================== -->
+            <section class="page-view" id="view-einrichtungen">
+
+                <div class="section-heading">
+                    <div>
+                        <h2>Einrichtungsverzeichnis</h2>
+                        <p>Durchsuche das Verzeichnis nach passenden Anlaufstellen.</p>
+                    </div>
+
+                    <button
+                        type="button"
+                        class="action-button"
+                        data-open-view="datenpflege"
+                    >
+                        + Einrichtung hinzufügen
+                    </button>
+                </div>
+
+                <!-- Suchbereich -->
+                <section class="filter-panel" aria-labelledby="search-heading">
+                    <h2 id="search-heading">Wonach suchst du?</h2>
+
+                    <form id="search-form">
+                        <div class="filter-grid">
+
+                            <div class="form-field search-field">
+                                <label for="search-input">
+                                    Suchbegriff
+                                </label>
+
+                                <div class="input-with-icon">
+                                    <span aria-hidden="true">⌕</span>
+                                    <input
+                                        type="search"
+                                        id="search-input"
+                                        name="search"
+                                        placeholder="Name, Ort oder Postleitzahl ..."
+                                    >
+                                </div>
+                            </div>
+
+                            <div class="form-field">
+                                <label for="type-filter">
+                                    Einrichtungstyp
+                                </label>
+
+                                <select id="type-filter" name="typ">
+                                    <option value="">Alle Einrichtungstypen</option>
+                                    <option value="Pflegestützpunkt">
+                                        Pflegestützpunkt
+                                    </option>
+                                    <option value="Ambulanter Pflegedienst">
+                                        Ambulanter Pflegedienst
+                                    </option>
+                                    <option value="Tagespflege">
+                                        Tagespflege
+                                    </option>
+                                    <option value="Nachtpflege">
+                                        Nachtpflege
+                                    </option>
+                                    <option value="Pflegeheim">
+                                        Pflegeheim
+                                    </option>
+                                </select>
+                            </div>
+
+                            <div class="form-field">
+                                <label for="region-filter">Bundesland</label>
+
+                                <select id="region-filter" name="bundesland">
+                                    <option value="">Alle Bundesländer</option>
+                                </select>
+                            </div>
+
+                        </div>
+
+                        <div class="filter-actions">
+                            <button type="submit" class="action-button">
+                                Einrichtungen suchen
+                            </button>
+
+                            <button
+                                type="reset"
+                                class="secondary-button"
+                                id="reset-search"
+                            >
+                                Filter zurücksetzen
+                            </button>
+                        </div>
+                    </form>
+                </section>
+
+                <!-- Ergebnisse -->
+                <section class="directory-panel" aria-labelledby="results-heading">
+
+                    <div class="results-header">
+                        <div>
+                            <h2 id="results-heading">Suchergebnisse</h2>
+                            <p id="results-count" aria-live="polite">
+                                Einrichtungen werden geladen ...
+                            </p>
+                        </div>
+
+                        <button
+                            type="button"
+                            class="secondary-button"
+                            id="select-visible"
+                        >
+                            Alle auswählen
+                        </button>
+                    </div>
+
+                    <div class="bulk-actions" id="bulk-actions" hidden>
+                        <span>
+                            <strong id="selected-count">0</strong>
+                            Einrichtungen ausgewählt
+                        </span>
+
+                        <button
+                            type="button"
+                            class="action-button"
+                            id="open-email"
+                        >
+                            E-Mail vorbereiten
+                        </button>
+
+                        <button
+                            type="button"
+                            class="text-button"
+                            id="clear-selection"
+                        >
+                            Auswahl aufheben
+                        </button>
+                    </div>
+
+                    <div id="directory-results" class="directory-results">
+                        <div class="loading-state">
+                            <span class="loading-indicator"></span>
+                            <p>Einrichtungsdaten werden geladen ...</p>
+                        </div>
+                    </div>
+
+                    <div class="pagination">
+                        <span id="pagination-info">Seite 1</span>
+
+                        <div class="pagination-actions">
+                            <button
+                                type="button"
+                                class="secondary-button"
+                                id="previous-page"
+                                disabled
+                            >
+                                Zurück
+                            </button>
+
+                            <button
+                                type="button"
+                                class="secondary-button"
+                                id="next-page"
+                                disabled
+                            >
+                                Weiter
+                            </button>
+                        </div>
+                    </div>
+
+                </section>
+            </section>
+
+            <!-- ====================================== -->
+            <!-- ANSICHT 2: DATENPFLEGE                 -->
+            <!-- ====================================== -->
+            <section class="page-view" id="view-datenpflege" hidden>
+
+                <div class="section-heading">
+                    <div>
+                        <h2>Einrichtungsdaten pflegen</h2>
+                        <p>
+                            Neue Einrichtungen anlegen oder bestehende
+                            Datensätze bearbeiten.
+                        </p>
+                    </div>
+                </div>
+
+                <section class="form-panel">
+                    <form id="center-form">
+
+                        <input type="hidden" id="center-id" name="id">
+
+                        <div class="form-section-heading">
+                            <h3>Allgemeine Informationen</h3>
+                            <p>Angaben zur Einrichtung</p>
+                        </div>
+
+                        <div class="editor-grid">
+
+                            <div class="form-field">
+                                <label for="center-name">
+                                    Name der Einrichtung *
+                                </label>
+                                <input
+                                    id="center-name"
+                                    name="name"
+                                    required
+                                    maxlength="200"
+                                    placeholder="Name der Einrichtung"
+                                >
+                            </div>
+
+                            <div class="form-field">
+                                <label for="center-type">
+                                    Einrichtungstyp *
+                                </label>
+                                <select id="center-type" name="typ" required>
+                                    <option value="">Bitte auswählen</option>
+                                    <option value="Pflegestützpunkt">
+                                        Pflegestützpunkt
+                                    </option>
+                                    <option value="Ambulanter Pflegedienst">
+                                        Ambulanter Pflegedienst
+                                    </option>
+                                    <option value="Tagespflege">Tagespflege</option>
+                                    <option value="Nachtpflege">Nachtpflege</option>
+                                    <option value="Pflegeheim">Pflegeheim</option>
+                                </select>
+                            </div>
+
+                            <div class="form-field">
+                                <label for="center-contact">
+                                    Ansprechpartner
+                                </label>
+                                <input
+                                    id="center-contact"
+                                    name="ansprechpartner"
+                                    maxlength="200"
+                                >
+                            </div>
+
+                            <div class="form-field">
+                                <label for="center-email">E-Mail-Adresse</label>
+                                <input
+                                    id="center-email"
+                                    name="email"
+                                    type="email"
+                                    maxlength="254"
+                                    placeholder="kontakt@beispiel.de"
+                                >
+                            </div>
+
+                            <div class="form-field">
+                                <label for="center-phone">Telefonnummer</label>
+                                <input
+                                    id="center-phone"
+                                    name="telefon"
+                                    type="tel"
+                                >
+                            </div>
+
+                            <div class="form-field">
+                                <label for="center-website">Internetseite</label>
+                                <input
+                                    id="center-website"
+                                    name="website"
+                                    type="url"
+                                    placeholder="https://..."
+                                >
+                            </div>
+
+                        </div>
+
+                        <div class="form-section-heading">
+                            <h3>Standort und Zuständigkeit</h3>
+                            <p>Geografische Angaben</p>
+                        </div>
+
+                        <div class="editor-grid">
+
+                            <div class="form-field">
+                                <label for="center-street">Straße und Hausnummer</label>
+                                <input id="center-street" name="strasse">
+                            </div>
+
+                            <div class="form-field">
+                                <label for="center-postcode">Postleitzahl</label>
+                                <input
+                                    id="center-postcode"
+                                    name="plz"
+                                    inputmode="numeric"
+                                >
+                            </div>
+
+                            <div class="form-field">
+                                <label for="center-city">Stadt / Gemeinde</label>
+                                <input id="center-city" name="ort">
+                            </div>
+
+                            <div class="form-field">
+                                <label for="center-state">Bundesland</label>
+                                <select id="center-state" name="bundesland">
+                                    <option value="">Bitte auswählen</option>
+                                </select>
+                            </div>
+
+                            <div class="form-field">
+                                <label for="center-district">Landkreis</label>
+                                <input id="center-district" name="landkreis">
+                            </div>
+
+                            <div class="form-field">
+                                <label for="center-hours">Öffnungszeiten</label>
+                                <input
+                                    id="center-hours"
+                                    name="oeffnungszeiten"
+                                    placeholder="z. B. Mo–Fr 08:00–16:00"
+                                >
+                            </div>
+
+                        </div>
+
+                        <div class="form-field full-width">
+                            <label for="center-services">
+                                Beratungsleistungen und Angebote
+                            </label>
+                            <textarea
+                                id="center-services"
+                                name="angebote"
+                                rows="4"
+                                placeholder="Angebote und Beratungsleistungen beschreiben ..."
+                            ></textarea>
+                        </div>
+
+                        <p class="form-note">
+                            * Pflichtfelder. Die tatsächlichen Pflichtfelder und
+                            zulässigen Werte müssen mit dem Datenmodell abgestimmt
+                            werden.
+                        </p>
+
+                        <div class="form-actions">
+                            <button
+                                type="button"
+                                class="secondary-button"
+                                data-open-view="einrichtungen"
+                            >
+                                Abbrechen
+                            </button>
+
+                            <button
+                                type="submit"
+                                class="action-button"
+                                id="save-center"
+                            >
+                                Einrichtung speichern
+                            </button>
+                        </div>
+
+                        <p
+                            id="center-form-message"
+                            class="form-message"
+                            role="status"
+                            aria-live="polite"
+                        ></p>
+
+                    </form>
+                </section>
+            </section>
+
+            <!-- ====================================== -->
+            <!-- ANSICHT 3: E-MAIL-ZENTRALE             -->
+            <!-- ====================================== -->
+            <section class="page-view" id="view-email" hidden>
+
+                <div class="section-heading">
+                    <div>
+                        <h2>E-Mail-Zentrale</h2>
+                        <p>
+                            Nachrichten an ausgewählte Pflegeeinrichtungen
+                            vorbereiten.
+                        </p>
+                    </div>
+                </div>
+
+                <section class="form-panel">
+                    <form id="email-form">
+
+                        <div class="form-section-heading">
+                            <h3>Empfänger</h3>
+                            <p>Auswahl aus dem Einrichtungsverzeichnis</p>
+                        </div>
+
+                        <div class="recipient-summary">
+                            <div>
+                                <span class="summary-label">
+                                    Ausgewählte Einrichtungen
+                                </span>
+                                <strong id="email-recipient-count">0</strong>
+                            </div>
+
+                            <button
+                                type="button"
+                                class="secondary-button"
+                                data-open-view="einrichtungen"
+                            >
+                                Einrichtungen auswählen
+                            </button>
+                        </div>
+
+                        <div class="form-field">
+                            <label for="email-recipients">
+                                Empfängeradressen
+                            </label>
+                            <textarea
+                                id="email-recipients"
+                                name="recipients"
+                                rows="4"
+                                readonly
+                                placeholder="Wähle zuerst Einrichtungen aus dem Verzeichnis aus."
+                            ></textarea>
+                            <p class="field-help">
+                                Die Adressen werden aus den ausgewählten
+                                Einrichtungsdatensätzen übernommen.
+                            </p>
+                        </div>
+
+                        <div class="form-section-heading">
+                            <h3>Nachricht verfassen</h3>
+                        </div>
+
+                        <div class="form-field">
+                            <label for="email-subject">Betreff *</label>
+                            <input
+                                id="email-subject"
+                                name="subject"
+                                required
+                                maxlength="250"
+                                placeholder="Betreff der Nachricht"
+                            >
+                        </div>
+
+                        <div class="form-field">
+                            <label for="email-body">Nachricht *</label>
+                            <textarea
+                                id="email-body"
+                                name="body"
+                                rows="9"
+                                required
+                                placeholder="Gib hier den Nachrichtentext ein ..."
+                            ></textarea>
+                        </div>
+
+                        <div class="notice">
+                            <strong>Datenschutz beachten</strong>
+                            <p>
+                                Die Empfängeradressen müssen beim Versand im
+                                BCC-Feld stehen, damit sie nicht gegenseitig
+                                sichtbar sind. Prüfe die Empfängerliste vor dem
+                                Versand.
+                            </p>
+                        </div>
+
+                        <div class="form-actions">
+                            <button
+                                type="button"
+                                class="secondary-button"
+                                id="clear-email"
+                            >
+                                Nachricht leeren
+                            </button>
+
+                            <button
+                                type="submit"
+                                class="action-button"
+                                id="send-email"
+                            >
+                                E-Mail vorbereiten
+                            </button>
+                        </div>
+
+                        <p
+                            id="email-form-message"
+                            class="form-message"
+                            role="status"
+                            aria-live="polite"
+                        ></p>
+
+                    </form>
+                </section>
+            </section>
+
+            <!-- ====================================== -->
+            <!-- ANSICHT 4: VERSANDHISTORIE             -->
+            <!-- ====================================== -->
+            <section class="page-view" id="view-historie" hidden>
+
+                <div class="section-heading">
+                    <div>
+                        <h2>Versandhistorie</h2>
+                        <p>
+                            Frühere Nachrichten und dokumentierte Versandvorgänge
+                            nachvollziehen.
+                        </p>
+                    </div>
+                </div>
+
+                <section class="filter-panel">
+                    <form id="history-filter-form">
+                        <div class="filter-grid">
+
+                            <div class="form-field">
+                                <label for="history-search">
+                                    Nachricht suchen
+                                </label>
+                                <input
+                                    id="history-search"
+                                    name="search"
+                                    type="search"
+                                    placeholder="Betreff oder Nachricht ..."
+                                >
+                            </div>
+
+                            <div class="form-field">
+                                <label for="history-year">Kalenderjahr</label>
+                                <select id="history-year" name="year">
+                                    <option value="">Alle Jahre</option>
+                                </select>
+                            </div>
+
+                        </div>
+
+                        <div class="filter-actions">
+                            <button type="submit" class="action-button">
+                                Historie filtern
+                            </button>
+                            <button
+                                type="reset"
+                                class="secondary-button"
+                                id="reset-history"
+                            >
+                                Zurücksetzen
+                            </button>
+                        </div>
+                    </form>
+                </section>
+
+                <section class="directory-panel">
+                    <div class="results-header">
+                        <div>
+                            <h2>Dokumentierte Nachrichten</h2>
+                            <p id="history-count" aria-live="polite">
+                                Versandhistorie noch nicht geladen.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="table-wrapper">
+                        <table class="history-table">
+                            <thead>
+                                <tr>
+                                    <th scope="col">Zeitpunkt</th>
+                                    <th scope="col">Betreff</th>
+                                    <th scope="col">Empfänger</th>
+                                    <th scope="col">Status</th>
+                                    <th scope="col">Details</th>
+                                </tr>
+                            </thead>
+
+                            <tbody id="history-results">
+                                <tr>
+                                    <td colspan="5" class="empty-cell">
+                                        Eine Schnittstelle zur
+                                        Versandhistorie muss noch angebunden
+                                        werden.
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+            </section>
+
+            <!-- ====================================== -->
+            <!-- ANSICHT 5: ÜBERSICHT                   -->
+            <!-- ====================================== -->
+            <section class="page-view" id="view-dashboard" hidden>
+
+                <div class="section-heading">
+                    <div>
+                        <h2>Projektübersicht</h2>
+                        <p>
+                            Zentrale Anlaufstelle für die Einrichtungsverwaltung
+                            und Kommunikation.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="overview-grid">
+
+                    <article class="overview-card">
+                        <span class="overview-icon">▤</span>
+                        <p>Einrichtungen</p>
+                        <strong id="dashboard-center-count">–</strong>
+                        <span class="overview-description">
+                            Gefundene Datensätze
+                        </span>
+                    </article>
+
+                    <article class="overview-card">
+                        <span class="overview-icon">✉</span>
+                        <p>Ausgewählte Empfänger</p>
+                        <strong id="dashboard-recipient-count">0</strong>
+                        <span class="overview-description">
+                            Aktuelle Auswahl
+                        </span>
+                    </article>
+
+                    <article class="overview-card">
+                        <span class="overview-icon">◷</span>
+                        <p>Versandhistorie</p>
+                        <strong id="dashboard-history-count">–</strong>
+                        <span class="overview-description">
+                            Dokumentierte Nachrichten
+                        </span>
+                    </article>
+
+                </div>
+
+                <section class="directory-panel">
+                    <h2>Schnellzugriff</h2>
+                    <p>
+                        Wähle einen Arbeitsbereich, um mit den jeweiligen
+                        Aufgaben fortzufahren.
+                    </p>
+
+                    <div class="quick-links">
+                        <button
+                            type="button"
+                            class="quick-link"
+                            data-open-view="einrichtungen"
+                        >
+                            <span>Einrichtungsverzeichnis öffnen</span>
+                            <span aria-hidden="true">→</span>
+                        </button>
+
+                        <button
+                            type="button"
+                            class="quick-link"
+                            data-open-view="datenpflege"
+                        >
+                            <span>Einrichtung neu anlegen</span>
+                            <span aria-hidden="true">→</span>
+                        </button>
+
+                        <button
+                            type="button"
+                            class="quick-link"
+                            data-open-view="email"
+                        >
+                            <span>E-Mail-Nachricht vorbereiten</span>
+                            <span aria-hidden="true">→</span>
+                        </button>
+
+                        <button
+                            type="button"
+                            class="quick-link"
+                            data-open-view="historie"
+                        >
+                            <span>Versandhistorie anzeigen</span>
+                            <span aria-hidden="true">→</span>
+                        </button>
+                    </div>
+                </section>
+
+            </section>
+
+            <!-- Fußzeile -->
+            <footer class="workspace-footer">
+                <span>PflegeKompass · ProjektLab 2</span>
+                <span>Benutzeroberfläche · AP 6</span>
+            </footer>
+
+        </main>
     </div>
-  </header>
-   <main class="container">
-    <section class="filters" aria-label="Filter">
-      <input type="search" id="search" placeholder="Suche nach Name, Ort oder PLZ …" aria-label="Suche" autocomplete="off" />
-      <select id="bundesland-filter" aria-label="Bundesland filtern">
-        <option value="">Alle Bundesländer</option>
-        <option value="">Baden-Württemberg</option>
-        <option value="">Bayern</option>
-        <option value="">Berlin</option>
-        <option value="">Brandenburg</option>
-        <option value="">Bremen</option>
-        <option value="">Hamburg</option>
-        <option value="">Hessen</option>
-        <option value="">Mecklenburg-Vorpommern</option>
-        <option value="">Niedersachsen</option>
-        <option value="">Nordrhein-Westfalen</option>
-        <option value="">Rheinlandpfalz</option>
-        <option value="">Saarland</option>
-        <option value="">Sachsen</option>
-        <option value="">Sachsen-Anhalt</option>
-        <option value="">Schleswig-Holstein</option>
-        <option value="">Thüringen</option>
-      </select>
-      <select id="angebot-filter" aria-label="Angebot filtern">
-        <option value="">Alle Angebote</option>
-        <!-- {# Werte = Spaltennamen in models.py. AP6-FEHLT: aus dem Backend laden statt doppelt zu pflegen. #} -->
-        <option value="pflegestuetzpunkt">Pflegestützpunkt</option>
-        <option value="pflegeberatung">Pflegeberatung</option>
-      </select>
-     <!-- {# AP6-FEHLT (AP2): Landkreis/Stadt/Gemeinde als abhängige Filter, sobald es die Hierarchie gibt. #} -->
-    </section>
-
-    <section class="list-meta">
-      <span id="result-count" role="status" aria-live="polite">Lade Daten …</span>
-      <div class="list-actions">
-        <button id="select-all" type="button">Alle sichtbaren auswählen</button>
-        <button id="select-none" type="button">Auswahl leeren</button>
-      </div>
-    </section>
-
-    <section aria-label="Ergebnisliste">
-      <ul id="center-list" class="center-list"></ul>
-      <nav id="pager" class="pager" aria-label="Seitenwahl"></nav>
-    </section>
-  </main>
-
-  <footer class="mail-bar">
-    <span><strong id="selected-count">0</strong> ausgewählt</span>
-    <div id="mail-parts" class="mail-parts"></div>
-    <p id="mail-warning" class="mail-warning" role="alert" hidden></p>
-    <button id="send-mail" type="button" disabled>E-Mail an Auswahl senden (öffnet Ihr Mailprogramm)</button>
-  </footer>
-
-  <script type="module" src="main.js"></script>
-
 </body>
 </html>
