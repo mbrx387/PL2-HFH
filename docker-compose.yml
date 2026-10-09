@@ -47,7 +47,7 @@ services:
   # Keycloak (SSO) + eigene Postgres-DB. Aktivieren mit:
   #   docker compose --profile sso up -d
   # Die App erzwingt den Login ueber dieses Keycloak (siehe app/auth.py);
-  # Inbetriebnahme/Bootstrapping: docs/ROADMAP.md, Abschnitt 1.1.
+  # Inbetriebnahme/Bootstrapping: README.md, Abschnitt 8.
   keycloak-db:
     image: postgres:16-alpine
     profiles: ["sso"]

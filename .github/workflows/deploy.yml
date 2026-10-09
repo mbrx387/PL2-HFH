@@ -109,7 +109,7 @@ jobs:
             done
             if [ -n "$missing" ]; then
               echo "::error::In /opt/pl2-hfh/.env fehlen oder sind Platzhalter:$missing"
-              echo "Siehe .env.example und docs/ROADMAP.md, Abschnitt 1.1."
+              echo "Siehe .env.example und README.md, Abschnitt 8."
               exit 1
             fi
             for cert in nginx/certs/fullchain.pem nginx/certs/privkey.pem; do

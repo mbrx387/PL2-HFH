@@ -45,7 +45,7 @@ class Settings(BaseSettings):
     # OIDC-Zugangsdaten fuer die Keycloak-Anbindung. Reihenfolge beim
     # erstmaligen Aufsetzen: Keycloak starten -> Client-Secret aus der
     # Admin-Konsole kopieren -> hier eintragen -> App (neu) starten.
-    # Siehe docs/ROADMAP.md, Abschnitt 1.1.
+    # Siehe README.md, Abschnitt 8.
     oidc_issuer: str | None = None
     oidc_client_id: str | None = None
     oidc_client_secret: str | None = None

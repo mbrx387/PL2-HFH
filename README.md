@@ -62,7 +62,7 @@ PL2-HFH/
 ├── pyproject.toml                # ruff/pytest-Konfiguration
 ├── requirements-dev.txt
 ├── .env.example
-└── docs/ROADMAP.md               # Nächste Schritte / offene Punkte
+└── docs/ROADMAP.md               # Umgesetzter Stand / nächste Schritte
 ```
 
 ## 3. Datenquelle
@@ -175,7 +175,7 @@ nachträglich aufgesetzt:
   Log) – nicht für den Produktivbetrieb. Genauso wird ein unveränderter
   `SECRET_KEY` (signiert das Session-Cookie) im Produktivmodus abgelehnt.
 - Betriebsanleitung für Keycloak (Realm-Import, Client-Secret, Bootstrapping-
-  Reihenfolge) steht in [`docs/ROADMAP.md`](docs/ROADMAP.md), Abschnitt 1.1.
+  Reihenfolge) steht in [Abschnitt 8](#8-server-inbetriebnahme).
 
 ## 6. Bekannte Einschränkungen (aktueller Stand)
 
@@ -199,7 +199,7 @@ nachträglich aufgesetzt:
 ## 7. Lokal starten
 
 Da Login jetzt erzwungen wird (Abschnitt 5), braucht der vollständige Start
-Keycloak *vor* der App. Details/Begründung: [`docs/ROADMAP.md`](docs/ROADMAP.md), Abschnitt 1.1.
+Keycloak *vor* der App. Server-Variante: [Abschnitt 8](#8-server-inbetriebnahme).
 
 **A) Vollständig, mit Login (entspricht dem Zielsetup):**
 
@@ -252,6 +252,39 @@ ruff check . && pytest
 API-Dokumentation (Swagger UI) liegt automatisch unter `/api/docs` (ebenfalls
 login-pflichtig, sobald `AUTH_ENABLED=true`).
 
+## 8. Server-Inbetriebnahme
+
+Deploys laufen automatisch per GitHub Actions (`.github/workflows/deploy.yml`).
+Einmalig auf dem Server nötig, weil das Keycloak-Client-Secret erst nach dem
+Realm-Import existiert:
+
+1. **`.env` anlegen** unter `/opt/pl2-hfh/.env` (Vorlage: `.env.example`),
+   alle Werte außer `OIDC_CLIENT_SECRET` setzen. TLS-Zertifikat nach
+   `nginx/certs/fullchain.pem` und `privkey.pem` legen.
+2. **Keycloak starten:** `docker compose --profile sso up -d keycloak-db keycloak`
+3. **Admin-Konsole per SSH-Tunnel** öffnen (öffentlich gesperrt):
+   `ssh -L 8080:localhost:8080 <user>@<server>`, dann
+   `http://localhost:8080/idp/admin/` (Benutzer `admin`).
+4. **Einmalig: Login der Konsole auf den Tunnel umbiegen** – sonst leitet
+   Keycloak den Admin-Login auf die öffentliche Domain um:
+   ```bash
+   docker compose exec -it keycloak /opt/keycloak/bin/kcadm.sh config credentials \
+     --server http://localhost:8080/idp --realm master --user admin
+   docker compose exec keycloak /opt/keycloak/bin/kcadm.sh update realms/master \
+     -s 'attributes.frontendUrl=http://localhost:8080/idp'
+   ```
+5. **Client prüfen und Secret holen:** Realm `hfh-pflege` → Clients →
+   `pflege-finder`
+   - Settings: *Valid redirect URIs* `<APP_PUBLIC_URL>/auth/callback`,
+     *Valid post logout redirect URIs* `<APP_PUBLIC_URL>/`
+   - Credentials: *Client secret* kopieren und in `.env` als
+     `OIDC_CLIENT_SECRET` eintragen.
+6. **Deploy erneut auslösen** (Actions → „Re-run failed jobs“) oder
+   `docker compose --profile sso up -d`.
+
+Fehlt etwas in der `.env`, bricht der Deploy-Job mit einer Meldung ab, die die
+fehlenden Variablen benennt.
+
 ---
 
-Nächste Schritte und offene Diskussionspunkte: siehe [`docs/ROADMAP.md`](docs/ROADMAP.md).
+Umgesetzter Stand und nächste Schritte: siehe [`docs/ROADMAP.md`](docs/ROADMAP.md).

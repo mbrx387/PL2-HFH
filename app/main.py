@@ -37,7 +37,7 @@ async def lifespan(app: FastAPI):
             "AUTH_ENABLED=true, aber OIDC_ISSUER/OIDC_CLIENT_ID/OIDC_CLIENT_SECRET sind "
             "nicht vollstaendig gesetzt. Entweder Keycloak zuerst hochfahren "
             "('docker compose --profile sso up -d keycloak'), das Client-Secret aus der "
-            "Admin-Konsole in .env eintragen (siehe docs/ROADMAP.md, Abschnitt 1.1) und die "
+            "Admin-Konsole in .env eintragen (siehe README.md, Abschnitt 8) und die "
             "App neu starten - oder fuer lokale Entwicklung ohne Login AUTH_ENABLED=false "
             "setzen (NICHT fuer den Produktivbetrieb)."
         )
