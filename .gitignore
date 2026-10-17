@@ -1,6 +1,11 @@
 __pycache__/
 *.pyc
+# Echte Umgebungsdateien nie versionieren - nur die Vorlage .env.example.
+# Die Deploy-Pipeline bricht zusaetzlich ab, falls doch eine eingecheckt wird.
 .env
+.env.*
+*.env
+!.env.example
 .venv/
 venv/
 *.egg-info/
