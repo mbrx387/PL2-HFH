@@ -10,7 +10,57 @@ env:
   IMAGE_NAME: ${{ github.repository }}/app
 
 jobs:
+  # Bricht ab, sobald ein Commit eine echte Umgebungsdatei (.env, .env.local,
+  # prod.env, ...) hinzufuegt, aendert oder loescht. Der Deploy macht auf dem
+  # Server "git reset --hard" - eine versionierte .env wuerde die Server-.env
+  # (Secrets, Client-Secret, IMAGE_TAG) ueberschreiben bzw. loeschen und das
+  # Deployment zerstoeren. Erlaubt ist nur die Vorlage .env.example.
+  env-guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Keine .env-Dateien im Repository
+        env:
+          EVENT: ${{ github.event_name }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          is_env_file() {
+            grep -E '(^|/)(\.env(\..+)?|[^/]+\.env)$' | grep -vE '(^|/)\.env\.example$' || true
+          }
+
+          # 1) Aktueller Stand: keine versionierte .env.
+          tracked="$(git ls-files | is_env_file)"
+
+          # 2) Alle Commits dieses Pushes/PRs: auch eine .env, die in einem
+          #    Commit hinzugefuegt und im naechsten wieder entfernt wurde,
+          #    liegt danach mit allen Secrets in der Historie.
+          if [ "$EVENT" = "pull_request" ]; then
+            base="$PR_BASE"
+          else
+            base="$PUSH_BEFORE"
+          fi
+          if [ -z "$base" ] || ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
+            # Neuer Branch / unbekannter Vorgaenger: gegen main pruefen.
+            base="$(git merge-base origin/main HEAD 2>/dev/null || git rev-list --max-parents=0 HEAD | tail -n1)"
+          fi
+          touched="$(git log --format= --name-only "${base}..HEAD" | sort -u | is_env_file)"
+
+          if [ -n "$tracked$touched" ]; then
+            echo "::error::Umgebungsdateien duerfen nicht versioniert werden (nur .env.example ist erlaubt)."
+            [ -n "$tracked" ] && printf 'Versioniert:\n%s\n' "$tracked"
+            [ -n "$touched" ] && printf 'In diesen Commits geaendert:\n%s\n' "$touched"
+            echo "Datei entfernen (git rm --cached <datei>) und enthaltene Secrets rotieren."
+            exit 1
+          fi
+          echo "OK - keine .env-Dateien versioniert oder geaendert."
+
   test:
+    needs: env-guard
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -89,8 +139,23 @@ jobs:
               git remote add origin https://github.com/${{ github.repository }}.git
             fi
             git fetch origin main
+            # Zweite Sicherung direkt auf dem Server (falls env-guard
+            # umgangen wurde): enthaelt der Ziel-Commit eine .env, wuerde
+            # "reset --hard" die Server-.env ueberschreiben - VORHER abbrechen.
+            bad="$(git ls-tree -r --name-only origin/main \
+              | grep -E '(^|/)(\.env(\..+)?|[^/]+\.env)$' | grep -vE '(^|/)\.env\.example$' || true)"
+            if [ -n "$bad" ]; then
+              echo "::error::origin/main enthaelt Umgebungsdateien - Deploy abgebrochen:"
+              echo "$bad"
+              exit 1
+            fi
+            env_sum_before="$(sha256sum .env 2>/dev/null || true)"
             git checkout -f main
             git reset --hard origin/main
+            if [ "$(sha256sum .env 2>/dev/null || true)" != "$env_sum_before" ]; then
+              echo "::error::/opt/pl2-hfh/.env wurde beim Checkout veraendert - Deploy abgebrochen."
+              exit 1
+            fi
             # Pflichtvariablen der Server-.env pruefen, BEVOR docker compose
             # mit einer kryptischen Meldung abbricht. Platzhalter zaehlen als
             # fehlend. Zertifikate pruefen, weil nginx ohne sie nicht startet.
