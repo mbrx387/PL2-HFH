@@ -43,7 +43,10 @@ jobs:
           cache: pip
       - run: pip install -r app/requirements.txt -r requirements-dev.txt -r GetDataFromAPI/requirements.txt
       - run: ruff check .
-      - run: pytest -q --basetemp=build/pytest
+      - name: Run tests / Tests ausfuehren
+        run: |
+          mkdir -p build
+          pytest -q --basetemp=build/pytest
 
   import:
     needs: validate
