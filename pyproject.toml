@@ -9,6 +9,8 @@ select = ["E", "F", "I", "B", "UP"]
 ignore = ["B008"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+# Dedicated disposable test directory; avoids locked Windows system temp folders.
+addopts = "--basetemp=.pytest_tmp"
+testpaths = ["tests", "GetDataFromAPI"]
 # Repo-Root in sys.path, damit "import app" auch bei direktem `pytest`-Aufruf klappt.
 pythonpath = ["."]

@@ -9,9 +9,14 @@ __pycache__/
 .venv/
 venv/
 *.egg-info/
+build/
 .DS_Store
 
 # Selbstsignierte Dev-Zertifikate nicht versionieren
 nginx/certs/*.pem
 nginx/certs/*.key
 nginx/certs/*.crt
+
+.pytest_tmp/
+
+.pytest_cache/
