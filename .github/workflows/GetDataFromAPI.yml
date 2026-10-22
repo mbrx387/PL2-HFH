@@ -1,0 +1,93 @@
+name: GetDataFromAPI
+
+on:
+  push:
+    branches: [main, ETL-Prozesse]
+    paths:
+      - "GetDataFromAPI/**"
+      - "app/**"
+      - "tests/**"
+      - "requirements-dev.txt"
+      - "pyproject.toml"
+      - ".github/workflows/GetDataFromAPI.yml"
+  pull_request:
+    paths:
+      - "GetDataFromAPI/**"
+      - "app/**"
+      - "tests/**"
+      - "requirements-dev.txt"
+      - "pyproject.toml"
+      - ".github/workflows/GetDataFromAPI.yml"
+  workflow_dispatch:
+  schedule:
+    # Weekly on Saturday at 02:00 UTC (03:00 CET / 04:00 CEST).
+    - cron: "0 2 * * 6"
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: get-data-from-api
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r app/requirements.txt -r requirements-dev.txt -r GetDataFromAPI/requirements.txt
+      - run: ruff check .
+      - name: Run tests / Tests ausfuehren
+        run: |
+          mkdir -p build
+          pytest -q --basetemp=build/pytest
+
+  import:
+    needs: validate
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - run: pip install -r GetDataFromAPI/requirements.txt
+      - name: Restore last successful export / Letzten Export wiederherstellen
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          previous="$(gh api "repos/$GH_REPO/actions/artifacts?per_page=100" | jq -r --arg branch "$GITHUB_REF_NAME" '[.artifacts[] | select(.expired == false and (.name | startswith("pflegestellen-")) and .workflow_run.head_branch == $branch)][0].workflow_run.id // empty')"
+          if [ -n "$previous" ]; then
+            gh run download "$previous" --name "pflegestellen-$previous" --dir build/GetDataFromAPI
+          else
+            echo 'First run / Erster Lauf: app CSV is the baseline.'
+          fi
+      - name: Extract, transform and validate / Extrahieren, transformieren und pruefen
+        env:
+          ZQP_API_URL: ${{ secrets.ZQP_API_URL }}
+        run: python -m GetDataFromAPI
+      - name: Excel, JSON and CSV / Excel, JSON und CSV
+        uses: actions/upload-artifact@v4
+        with:
+          name: pflegestellen-${{ github.run_id }}
+          path: |
+            build/GetDataFromAPI/*.csv
+            build/GetDataFromAPI/*.json
+            build/GetDataFromAPI/*.xlsx
+          if-no-files-found: error
+          retention-days: 90
+      - name: Failure summary / Fehlerzusammenfassung
+        if: failure()
+        run: |
+          echo '## ETL failed / ETL fehlgeschlagen' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Existing app data is unchanged. Check the failed step, configuration and source availability before rerunning.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Bestehende App-Daten bleiben erhalten. Fehlerhaften Schritt, Konfiguration und Quelle vor erneutem Start pruefen.' >> "$GITHUB_STEP_SUMMARY"
