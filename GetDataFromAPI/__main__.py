@@ -9,7 +9,9 @@ from GetDataFromAPI.pipeline import ImportFailure, run
 
 
 def main():
-    parser = argparse.ArgumentParser(description="ZQP ETL: Excel, JSON, CSV and changes / Excel, JSON, CSV und Aenderungen")
+    parser = argparse.ArgumentParser(
+        description="ZQP ETL: Excel, JSON, CSV and changes / Excel, JSON, CSV und Aenderungen"
+    )
     parser.add_argument("--baseline", type=Path, default=Path("app/data/pflegestellen.csv"))
     parser.add_argument("--output", type=Path, default=Path("build/GetDataFromAPI/pflegestellen.csv"))
     args = parser.parse_args()
