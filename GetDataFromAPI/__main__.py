@@ -5,7 +5,7 @@ import logging
 import os
 from pathlib import Path
 
-from GetDataFromAPI.pipeline import ImportFailure, run
+from GetDataFromAPI.pipeline import ImportFailure, read_baseline, run, write_candidate
 
 
 def main():
@@ -14,10 +14,18 @@ def main():
     )
     parser.add_argument("--baseline", type=Path, default=Path("app/data/pflegestellen.csv"))
     parser.add_argument("--output", type=Path, default=Path("build/GetDataFromAPI/pflegestellen.csv"))
+    parser.add_argument(
+        "--data-output", type=Path, default=Path("app/data/pflegestellen.csv"),
+        help="Validated CSV handoff / Gepruefte CSV fuer den Datenbankimport",
+    )
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     try:
         run(os.environ.get("ZQP_API_URL", ""), args.baseline, args.output)
+        if args.data_output.resolve() != args.output.resolve():
+            # Publish only after the complete extraction and all exports succeeded.
+            write_candidate(args.data_output, read_baseline(args.output))
+        logging.info("CSV bereitgestellt / CSV published: %s", args.data_output)
     except ImportFailure as error:
         logging.error("%s", error)
         return 1

@@ -135,5 +135,6 @@
   "load_strategy": "Bestehendes db/import_centers.sql verwenden: text-Staging, centers-Upsert und Leistungszuordnungen in einer Transaktion; keine Löschung fehlender Einrichtungen.",
   "responsibility": "Datenbankimport, Zieltabellen und Benachrichtigung nach erfolgreichem Commit liegen beim Importverantwortlichen.",
   "import_script": "db/import_centers.sql (Branch gab_pflegedb)",
-  "container_csv_path": "/tmp/pflegestellen.csv"
+  "container_csv_path": "/tmp/pflegestellen.csv",
+  "handoff_path": "app/data/pflegestellen.csv"
 }

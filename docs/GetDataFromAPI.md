@@ -169,7 +169,7 @@ unverändert. PLZ und Telefonnummern bleiben Text. Details stehen in
 Der Importverantwortliche kopiert die neue CSV im Projektordner:
 
 ```sh
-docker compose cp build/GetDataFromAPI/pflegestellen.csv app-db:/tmp/pflegestellen.csv
+docker compose cp app/data/pflegestellen.csv app-db:/tmp/pflegestellen.csv
 ```
 
 Voraussetzung sind Docker Compose, die Compose-Konfiguration aus dem Datenbankbranch
@@ -189,3 +189,30 @@ Use the existing `db/import_centers.sql` from gab_pflegedb unchanged. Copy the E
 `/tmp/pflegestellen.csv`. This copy does not execute SQL. The import owner then runs and verifies the existing transactional importer.
 CSV column order, semicolon delimiter, 0/1 flags and text postal/phone fields are
 preserved. IDs map to integer and source dates to timestamp without time zone.
+
+
+## CSV am vereinbarten Übergabeort
+
+`python -m GetDataFromAPI` stellt nach erfolgreicher vollständiger Extraktion,
+Validierung und Exporterzeugung die neue CSV zusätzlich unter
+`app/data/pflegestellen.csv` bereit. Diese Datei wird temporär auf demselben
+Dateisystem geschrieben und erst nach vollständigem Schreiben ersetzt. Ein
+Abruf-/Validierungsfehler lässt die bisherige Datei unverändert. Bei fehlgeschlagener
+Bereitstellung bleiben die bereits erfolgreichen Exporte im Ausgabeordner erhalten;
+der CLI-Prozess meldet einen Fehler. Dies ist keine Transaktion über beide Orte.
+
+Excel, JSON und Vergleichsberichte bleiben in `build/GetDataFromAPI`. Mit
+`--data-output PFAD` kann die CSV-Übergabe gezielt in einen anderen Ordner erfolgen.
+Der Default-Übergabeort ist eine versionierte Datei: Ein erfolgreicher lokaler Lauf
+erscheint deshalb als lokale Änderung dieser CSV. Sie wird nicht automatisch committet.
+In GitHub Actions erfolgt die Bereitstellung nur im Runner-Arbeitsverzeichnis;
+kein automatisches Schreiben in main, auf den Server oder in PostgreSQL. Der Kollege
+übernimmt weiterhin den Download/Transport und den Datenbankimport.
+
+### CSV handoff (English)
+
+After a complete successful export, the CLI atomically publishes the validated CSV
+at `app/data/pflegestellen.csv` (override with `--data-output`). Reports stay under
+build/GetDataFromAPI. A source error preserves the previous handoff file. A handoff
+write error leaves the completed report exports available and returns failure.
+The runner copy is not an automatic Git commit, server deployment or database import.
