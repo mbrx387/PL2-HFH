@@ -169,7 +169,7 @@ unverändert. PLZ und Telefonnummern bleiben Text. Details stehen in
 Der Importverantwortliche kopiert die neue CSV im Projektordner:
 
 ```sh
-docker compose cp build/GetDataFromAPI/pflegestellen.csv app-db:/tmp/pflegestellen.csv
+docker compose cp app/data/pflegestellen.csv app-db:/tmp/pflegestellen.csv
 ```
 
 Voraussetzung sind Docker Compose, die Compose-Konfiguration aus dem Datenbankbranch
@@ -189,3 +189,61 @@ Use the existing `db/import_centers.sql` from gab_pflegedb unchanged. Copy the E
 `/tmp/pflegestellen.csv`. This copy does not execute SQL. The import owner then runs and verifies the existing transactional importer.
 CSV column order, semicolon delimiter, 0/1 flags and text postal/phone fields are
 preserved. IDs map to integer and source dates to timestamp without time zone.
+
+
+## CSV am vereinbarten Übergabeort
+
+`python -m GetDataFromAPI` stellt nach erfolgreicher vollständiger Extraktion,
+Validierung und Exporterzeugung die neue CSV zusätzlich unter
+`app/data/pflegestellen.csv` bereit. Diese Datei wird temporär auf demselben
+Dateisystem geschrieben und erst nach vollständigem Schreiben ersetzt. Ein
+Abruf-/Validierungsfehler lässt die bisherige Datei unverändert. Bei fehlgeschlagener
+Bereitstellung bleiben die bereits erfolgreichen Exporte im Ausgabeordner erhalten;
+der CLI-Prozess meldet einen Fehler. Dies ist keine Transaktion über beide Orte.
+
+Excel, JSON und Vergleichsberichte bleiben in `build/GetDataFromAPI`. Mit
+`--data-output PFAD` kann die CSV-Übergabe gezielt in einen anderen Ordner erfolgen.
+Der Default-Übergabeort ist eine versionierte Datei: Ein erfolgreicher lokaler Lauf
+erscheint deshalb als lokale Änderung dieser CSV. Sie wird nicht automatisch committet.
+In GitHub Actions erfolgt die Bereitstellung nur im Runner-Arbeitsverzeichnis;
+kein automatisches Schreiben in main, auf den Server oder in PostgreSQL. Der Kollege
+übernimmt weiterhin den Download/Transport und den Datenbankimport.
+
+### CSV handoff (English)
+
+After a complete successful export, the CLI atomically publishes the validated CSV
+at `app/data/pflegestellen.csv` (override with `--data-output`). Reports stay under
+build/GetDataFromAPI. A source error preserves the previous handoff file. A handoff
+write error leaves the completed report exports available and returns failure.
+The runner copy is not an automatic Git commit, server deployment or database import.
+
+
+## Datenstand im Git-Repository aktualisieren
+
+Nach erfolgreichem geplantem Samstagsimport auf main lädt die Pipeline zunächst
+alle Exporte als Artefakt hoch. Bei geänderter app/data/pflegestellen.csv erstellt
+sie anschließend einen eigenen codex/pflegestellen-RUNID-VERSUCH-Branch, committet
+nur diese CSV und öffnet einen Pull Request nach main. Kein automatischer Merge.
+Ohne CSV-Unterschied entsteht kein Daten-Commit. Manuelle Läufe und Läufe anderer Branches erzeugen
+keinen Daten-PR. Beim Rerun können weitere Daten-PRs entstehen; bestehende offene
+Vorschläge vor dem Merge vergleichen und überholte PRs schließen.
+
+Voraussetzung: Settings → Actions → General → Workflow permissions →
+Allow GitHub Actions to create and approve pull requests muss aktiviert sein.
+Der Importjob benötigt contents: write und pull-requests: write; die Prüfjobs
+bleiben lesend. Ein Fehler bei Push/PR-Erstellung lässt das schon hochgeladene
+Datenartefakt verfügbar und markiert den Lauf als fehlgeschlagen.
+
+Bei mit GITHUB_TOKEN erstellten PRs können die PR-Workflows eine Freigabe benötigen;
+Prüfungen im PR ansehen und freigeben, nicht ungeprüft mergen.
+Referenz: https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow
+Erst nach dem genehmigten Merge sehen Kollegen die neue CSV durch git pull.
+PostgreSQL wird weiterhin ausschließlich durch den Importverantwortlichen aktualisiert.
+
+### Repository data updates (English)
+
+Only successful scheduled Saturday imports on main propose the changed CSV through a dedicated data
+branch and PR. Only app/data/pflegestellen.csv is committed, never reports or secrets.
+There is no automatic merge. Enable Actions PR creation in repository settings and
+approve the resulting PR workflow runs where required. Artifacts remain available
+if PR creation fails. Database loading stays with the import owner.

@@ -305,7 +305,13 @@ def test_cli_success_and_failure(tmp_path, monkeypatch, caplog):
     original, output = tmp_path / "baseline.csv", tmp_path / "result.csv"
     write_candidate(original, baseline())
     monkeypatch.setenv("ZQP_API_URL", "https://source.example/secret-token")
-    monkeypatch.setattr(sys, "argv", ["GetDataFromAPI", "--baseline", str(original), "--output", str(output)])
+    data_output = tmp_path / "app" / "data" / "pflegestellen.csv"
+    write_candidate(data_output, baseline())
+    monkeypatch.setattr(
+        sys, "argv",
+        ["GetDataFromAPI", "--baseline", str(original), "--output", str(output),
+         "--data-output", str(data_output)],
+    )
     real_run = run
 
     def local_run(endpoint, baseline_path, output_path):
@@ -320,10 +326,13 @@ def test_cli_success_and_failure(tmp_path, monkeypatch, caplog):
     monkeypatch.setattr(cli, "run", local_run)
     assert cli.main() == 0
     assert read_baseline(output)[0]["name"] == "CLI Updated"
+    assert data_output.read_bytes() == output.read_bytes()
+    published = data_output.read_bytes()
     previous = output.read_bytes()
     monkeypatch.delenv("ZQP_API_URL")
     assert cli.main() == 1
     assert output.read_bytes() == previous
+    assert data_output.read_bytes() == published
     assert "secret-token" not in caplog.text
 
 
