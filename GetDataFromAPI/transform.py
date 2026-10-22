@@ -2,6 +2,7 @@
 
 import ast
 import json
+from datetime import UTC, datetime
 
 
 def clean_text(value):
@@ -168,3 +169,16 @@ def convert_item(item, eigene_id):
         "zqp_raw": item,
         "updated_at": "",
     }
+
+
+def parse_timestamp(value):
+    """Return a timezone-free UTC datetime suitable for Excel, or None."""
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(value))
+    except ValueError:
+        return None
+    if parsed.tzinfo is not None:
+        parsed = parsed.astimezone(UTC).replace(tzinfo=None)
+    return parsed.replace(microsecond=0)

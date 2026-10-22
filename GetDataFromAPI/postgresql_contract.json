@@ -1,0 +1,139 @@
+{
+  "contract_version": 1,
+  "preferred_file": "pflegestellen.csv",
+  "alternative_file": "pflegestellen_new.json",
+  "json_root": "array",
+  "primary_key": "unsere_id",
+  "csv": {
+    "encoding": "utf-8-sig",
+    "delimiter": ";",
+    "header": [
+      "unsere_id",
+      "zqp_id",
+      "name",
+      "adresse",
+      "plz",
+      "ort",
+      "bundesland",
+      "email",
+      "telefon",
+      "website",
+      "latitude",
+      "longitude",
+      "pflegestuetzpunkt",
+      "pflegeberatung",
+      "wohnberatung",
+      "demenzberatung",
+      "angehoerigenberatung",
+      "betreuungsberatung",
+      "leistungen",
+      "updated_at"
+    ]
+  },
+  "fields": [
+    {
+      "name": "unsere_id",
+      "postgresql_type": "integer",
+      "mapping": "unsere_id → centers.id; stabiler Konfliktschlüssel, nicht neu generieren."
+    },
+    {
+      "name": "zqp_id",
+      "postgresql_type": "text",
+      "mapping": "Text erhalten; leere Zeichenfolge zulässig."
+    },
+    {
+      "name": "name",
+      "postgresql_type": "text",
+      "mapping": "Text erhalten; leere Zeichenfolge zulässig."
+    },
+    {
+      "name": "adresse",
+      "postgresql_type": "text",
+      "mapping": "Text erhalten; leere Zeichenfolge zulässig."
+    },
+    {
+      "name": "plz",
+      "postgresql_type": "text",
+      "mapping": "Text erhalten; leere Zeichenfolge zulässig."
+    },
+    {
+      "name": "ort",
+      "postgresql_type": "text",
+      "mapping": "Text erhalten; leere Zeichenfolge zulässig."
+    },
+    {
+      "name": "bundesland",
+      "postgresql_type": "text",
+      "mapping": "Text erhalten; leere Zeichenfolge zulässig."
+    },
+    {
+      "name": "email",
+      "postgresql_type": "text",
+      "mapping": "Text erhalten; leere Zeichenfolge zulässig."
+    },
+    {
+      "name": "telefon",
+      "postgresql_type": "text",
+      "mapping": "Text erhalten; leere Zeichenfolge zulässig."
+    },
+    {
+      "name": "website",
+      "postgresql_type": "text",
+      "mapping": "Text erhalten; leere Zeichenfolge zulässig."
+    },
+    {
+      "name": "latitude",
+      "postgresql_type": "double precision",
+      "mapping": "JSON null oder leeres CSV-Feld → SQL NULL; sonst endliche Zahl."
+    },
+    {
+      "name": "longitude",
+      "postgresql_type": "double precision",
+      "mapping": "JSON null oder leeres CSV-Feld → SQL NULL; sonst endliche Zahl."
+    },
+    {
+      "name": "pflegestuetzpunkt",
+      "postgresql_type": "boolean",
+      "mapping": "0 → false, 1 → true; JSON liefert derzeit Zahlen, keine JSON-Booleans."
+    },
+    {
+      "name": "pflegeberatung",
+      "postgresql_type": "boolean",
+      "mapping": "0 → false, 1 → true; JSON liefert derzeit Zahlen, keine JSON-Booleans."
+    },
+    {
+      "name": "wohnberatung",
+      "postgresql_type": "boolean",
+      "mapping": "0 → false, 1 → true; JSON liefert derzeit Zahlen, keine JSON-Booleans."
+    },
+    {
+      "name": "demenzberatung",
+      "postgresql_type": "boolean",
+      "mapping": "0 → false, 1 → true; JSON liefert derzeit Zahlen, keine JSON-Booleans."
+    },
+    {
+      "name": "angehoerigenberatung",
+      "postgresql_type": "boolean",
+      "mapping": "0 → false, 1 → true; JSON liefert derzeit Zahlen, keine JSON-Booleans."
+    },
+    {
+      "name": "betreuungsberatung",
+      "postgresql_type": "boolean",
+      "mapping": "0 → false, 1 → true; JSON liefert derzeit Zahlen, keine JSON-Booleans."
+    },
+    {
+      "name": "leistungen",
+      "postgresql_type": "text",
+      "mapping": "Text erhalten; leere Zeichenfolge zulässig."
+    },
+    {
+      "name": "updated_at",
+      "postgresql_type": "timestamp without time zone",
+      "mapping": "updated_at → centers.quelle_updated_at; CSV YYYY-MM-DD HH:MM:SS. Bekannte Zeitzonen werden beim CSV-Export nach UTC umgerechnet; historische Werte ohne Zeitzone bleiben unverändert."
+    }
+  ],
+  "load_strategy": "Bestehendes db/import_centers.sql verwenden: text-Staging, centers-Upsert und Leistungszuordnungen in einer Transaktion; keine Löschung fehlender Einrichtungen.",
+  "responsibility": "Datenbankimport, Zieltabellen und Benachrichtigung nach erfolgreichem Commit liegen beim Importverantwortlichen.",
+  "import_script": "db/import_centers.sql (Branch gab_pflegedb)",
+  "container_csv_path": "/tmp/pflegestellen.csv"
+}

@@ -9,6 +9,8 @@ from pathlib import Path
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill
 
+from GetDataFromAPI.transform import parse_timestamp
+
 CHANGE_COLUMNS = ("change", "unsere_id", "name", "field", "old", "new")
 
 
@@ -89,7 +91,10 @@ def write_workbook(path, rows, columns, title):
         sheet.append([row.get(field, "") for field in columns])
         # Source text must remain text, including strings starting with '='.
         for cell in next(sheet.iter_rows(min_row=row_index, max_row=row_index, max_col=len(columns))):
-            if isinstance(cell.value, str):
+            if columns[cell.column - 1] == "updated_at" and parse_timestamp(cell.value) is not None:
+                cell.value = parse_timestamp(cell.value)
+                cell.number_format = "dd.mm.yyyy hh:mm:ss"
+            elif isinstance(cell.value, str):
                 cell.data_type = "s"
     sheet.freeze_panes = "A2"
     sheet.auto_filter.ref = sheet.dimensions
@@ -97,6 +102,8 @@ def write_workbook(path, rows, columns, title):
         letter = cells[0].column_letter
         field = cells[0].value
         sheet.column_dimensions[letter].width = 18 if field not in {"name", "adresse", "old", "new"} else 45
+        if field == "updated_at":
+            sheet.column_dimensions[letter].width = 24
         if field in {"plz", "telefon", "zqp_id"}:
             for cell in cells[1:]:
                 cell.number_format = "@"

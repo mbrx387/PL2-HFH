@@ -7,11 +7,9 @@ Im Repositoryordner in PowerShell:
 ```powershell
 python -m pip install -r app/requirements.txt -r requirements-dev.txt
 python -m pytest -q
-python -m GetDataFromAPI.demo
 ```
 
-Die Demo ruft keine API ab und erzeugt klar bezeichnete Beispieldateien unter
-`build/GetDataFromAPI/demo`. Sie verändert keine Live-Exporte.
+Die automatisierten Prüfungen liegen unter `tests`. Der echte Import erzeugt die Datenexporte.
 
 Für den echten vollständigen Import:
 
@@ -64,8 +62,7 @@ per PR und erfolgreichem Deployment, nicht automatisch in eine Live-Datenbank.
 
 `.github/workflows/GetDataFromAPI.yml` prüft relevante Änderungen bei Push auf
 `ETL-Prozesse`/`main` sowie bei Pull Requests. Job `validate`: Python 3.12,
-Abhängigkeiten installieren, Ruff, alle pytest-Tests, Offline-Demo und Artefakt
-`example-exports-<run-id>` zum Download vor dem Merge.
+Abhängigkeiten installieren, Ruff und alle pytest-Tests.
 Die Tests prüfen Wiederholungen, CLI, beschädigte Eingaben, IDs, CSV-Kompatibilität,
 Excel/JSON, Differenzen, Rotation und Schutz bei Schreibfehlern. pytest nutzt
 `.pytest_tmp` im Projekt, um gesperrte Windows-Tempverzeichnisse zu vermeiden.
@@ -81,8 +78,7 @@ Branches, damit `old/new` auch auf frischen Runnern erhalten bleiben. Live-Artef
 werden für bis zu 90 Tage gespeichert (Repository-/Organisationseinstellungen können
 die maximale Aufbewahrung begrenzen). Ohne verfügbares Artefakt wird ausdrücklich
 auf die versionierte App-CSV zurückgegriffen. Für eine garantiert langfristige
-Historie ist ein externer dauerhafter Speicher erforderlich. Demo-Artefakte zählen
-nicht als Live-Baseline. Kein Produktionsdeployment aus dem ETL-Arbeitsbranch.
+Historie ist ein externer dauerhafter Speicher erforderlich. Kein Produktionsdeployment aus dem ETL-Arbeitsbranch.
 
 Die Workflow-Prüfungen laufen vor dem Merge. Ob GitHub einen Merge bei roten Checks
 verhindert, muss zusätzlich ein Repository-Administrator über einen Ruleset bzw.
@@ -112,24 +108,17 @@ keine Quell-URL, Tokens oder Kontaktpayloads.
 | `pipeline.py` | Extraktion, Wiederholungen, Validierung, Zusammenführung |
 | `transform.py` | Text-/Kontaktbereinigung, Leistungsheuristik, Feldzuordnung |
 | `export.py` | Excel/JSON/CSV, alter/neuer Stand, Differenzen, Veröffentlichung |
-| `demo.py` | Reproduzierbare Offline-Demonstration |
-| `test_pipeline.py`, `test_export.py` | Automatisierte Tests ohne Live-API |
+| `tests/test_etl_import_validation.py`, `tests/test_excel_json_snapshot_comparison.py` | Automatisierte Tests ohne Live-API |
 | `app/main.py` | Separater FastAPI-Web-App-Einstieg, kein ETL-Scheduler |
 
-Stand 22.10.2026: 68 lokale Tests auf Windows/Python 3.14 und Ruff erfolgreich.
-Live-Stichprobe: drei Suchpunkte, 4.092 alte und 4.113 zusammengeführte neue
-Datensätze, 21 Vergleichszeilen, drei ausgesonderte Treffer. Alle erzeugten Excel-
-und JSON-Dateien wieder geöffnet und geprüft. Kein vollständiger Deutschlandimport.
-Offen: GitHub-Ausführung, echte Cron-Auslösung, Benachrichtigungszustellung,
-fachliche Vollabnahme. Docker lokal nicht verfügbar.
+Stand 22.10.2026: Der vollständige lokale Live-Lauf hat 3.339 Abfragen ausgeführt: 4.092 alte, 4.097 neue Datensätze, 691 Vergleichszeilen und 17 ausgesonderte Treffer. Excel/JSON wurden geöffnet und geprüft; Excel-Datumszellen besitzen das Format dd.mm.yyyy hh:mm:ss. Offen bleiben echter geplanter GitHub-Import und Benachrichtigungszustellung.
 
 ---
 
 # English operating guide
 
 Install app and development requirements, then run `python -m pytest -q`.
-`python -m GetDataFromAPI.demo` creates isolated offline examples in
-`build/GetDataFromAPI/demo`. For real extraction set shell variable `ZQP_API_URL`
+Tests are located in `tests`. For real extraction set shell variable `ZQP_API_URL`
 and run `python -m GetDataFromAPI`; no `.env` loading. The complete grid has 3,339
 requests and takes at least 17 minutes of throttling plus network latency.
 Confirm source permission, rate limits, field mapping, pagination/radius and coverage.
@@ -146,7 +135,7 @@ codes and prevent source strings being interpreted as Excel formulas.
 Exports are staged and rolled back on ordinary write failures, without a multi-file
 power-loss transaction guarantee. Do not run concurrent local imports into one folder.
 Review CSV and reports before merging data and deploying; there is no direct live DB
-synchronization. Branch pushes and PRs run lint, all tests and an offline demo artifact
+synchronization. Branch pushes and PRs run lint and all tests
 before merge. Enforcing required checks additionally needs a main branch protection
 rule configured by a repository administrator.
 
@@ -155,7 +144,7 @@ secret `ZQP_API_URL`. Scheduled execution starts on the default branch and can b
 delayed. Restore the latest available live artifact from the same branch to retain
 state across runners; retention is up to 90 days subject to repository policies.
 When none is available, fall back explicitly to app CSV. Permanent history requires
-external durable storage. Demo artifacts never serve as live baselines.
+external durable storage.
 
 Requests use a 30-second timeout, at most three attempts for network errors/429/5xx,
 1/2-second backoff and 0.3-second throttling. Unrecoverable errors produce exit 1 and
@@ -163,7 +152,40 @@ a failed Actions summary without publishing new live exports. Enable personal Ac
 notifications and verify delivery. No messages are sent by the script. Escalate
 persistent failures and retain last reviewed data. Logs omit endpoint tokens/payloads.
 
-68 local tests passed on Windows/Python 3.14. A three-point live sample produced
-4,113 merged records, 21 changes and three quarantined hits; workbooks/JSON were
-reopened and checked. Full national extraction, hosted workflow, cron delivery,
-notifications and business acceptance remain pending. Docker unavailable locally.
+The complete local live run processed 3,339 requests: 4,092 old and 4,097 new records, 691 comparison rows and 17 rejected hits. Excel/JSON were reopened and checked, including Excel date formatting. Scheduled live execution and notification delivery still need verification.
+
+
+## Übergabe an PostgreSQL (Branch gab_pflegedb)
+
+Die CSV ist auf `db/import_centers.sql` aus dem Kollegenbranch abgestimmt.
+Die 20 Spalten und deren Reihenfolge bleiben erhalten: Semikolon, UTF-8 mit BOM,
+Kopfzeile, Beratungsflags 0/1, Koordinaten mit Dezimalpunkt und leere fehlende Werte.
+`unsere_id` wird zu `centers.id` (integer), `updated_at` zu
+`centers.quelle_updated_at` (timestamp ohne Zeitzone). Bekannte Zeitzonen werden
+im CSV-Export nach UTC umgerechnet; historische Zeitstempel ohne Zeitzone bleiben
+unverändert. PLZ und Telefonnummern bleiben Text. Details stehen in
+`GetDataFromAPI/postgresql_contract.json`.
+
+Der Importverantwortliche kopiert die neue CSV im Projektordner:
+
+```sh
+docker compose cp build/GetDataFromAPI/pflegestellen.csv app-db:/tmp/pflegestellen.csv
+```
+
+Voraussetzung sind Docker Compose, die Compose-Konfiguration aus dem Datenbankbranch
+und der laufende Container. Die CSV muss durch einen erfolgreichen lokalen ETL-Lauf
+oder durch Entpacken des GitHub-Artefakts vorliegen. Die ETL-Pipeline führt diesen
+Kopiervorgang nicht automatisch aus.
+
+Anschließend führt der Importverantwortliche sein unverändertes
+`db/import_centers.sql` gemäß seiner Datenbankanleitung aus. Der Kopiervorgang führt
+kein SQL aus und bestätigt keinen erfolgreichen Datenbankimport. Erst nach erfolgreichem
+Import und Prüfung der Datensätze darf „Datenbank aktualisiert“ gemeldet werden.
+Ein echter PostgreSQL-Import ist auf unserem ETL-Branch noch nicht geprüft.
+
+### PostgreSQL handoff (English)
+
+Use the existing `db/import_centers.sql` from gab_pflegedb unchanged. Copy the ETL CSV with `docker compose cp` into app-db at
+`/tmp/pflegestellen.csv`. This copy does not execute SQL. The import owner then runs and verifies the existing transactional importer.
+CSV column order, semicolon delimiter, 0/1 flags and text postal/phone fields are
+preserved. IDs map to integer and source dates to timestamp without time zone.

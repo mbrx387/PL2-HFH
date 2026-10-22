@@ -1,8 +1,5 @@
 # PL2-HFH – Pflegezentren-Finder
 
-ETL-Datenimport, Cron-Pipeline und Fehlerbenachrichtigungen / ETL import,
-scheduled pipeline and failure notifications: [ETL-Betriebsanleitung / Operating guide](docs/GetDataFromAPI.md).
-
 Entwicklung einer Datenbank zur Bedarfsermittlung pflegender Angehöriger.
 
 Dieses Repository enthält das **Grundgerüst** der Webanwendung: Sie zeigt

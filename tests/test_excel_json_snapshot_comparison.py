@@ -4,10 +4,10 @@ import json
 
 import pytest
 from openpyxl import load_workbook
+from test_etl_import_validation import baseline
 
 from GetDataFromAPI.export import changes_between, publish_exports
 from GetDataFromAPI.pipeline import run, write_candidate
-from GetDataFromAPI.test_pipeline import baseline
 
 
 def test_excel_json_and_change_files_are_created(tmp_path):
@@ -105,3 +105,20 @@ def test_unknown_nameless_records_are_reported_and_known_records_preserved(tmp_p
     rejected = json.loads((tmp_path / "pflegestellen_rejected.json").read_text(encoding="utf-8"))
     assert len(new) == 1 and new[0]["unsere_id"] == 42
     assert len(rejected) == 1 and rejected[0]["zqp_id"] == "unknown"
+
+
+def test_excel_and_csv_show_real_readable_dates(tmp_path):
+    import csv
+    from datetime import datetime
+
+    records = [{**baseline()[0], "updated_at": "2026-10-22T18:30:45.123456+02:00"}]
+    output = tmp_path / "pflegestellen.csv"
+    publish_exports(output, records, records)
+    book = load_workbook(tmp_path / "pflegestellen_new.xlsx")
+    cell = book.active["T2"]
+    assert cell.value == datetime(2026, 10, 22, 16, 30, 45)
+    assert cell.number_format == "dd.mm.yyyy hh:mm:ss"
+    assert book.active.column_dimensions["T"].width >= 24
+    book.close()
+    with output.open(encoding="utf-8-sig", newline="") as handle:
+        assert next(csv.DictReader(handle, delimiter=";"))["updated_at"] == "2026-10-22 16:30:45"

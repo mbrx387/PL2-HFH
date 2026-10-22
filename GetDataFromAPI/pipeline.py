@@ -14,7 +14,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode, urlsplit
 from urllib.request import Request, urlopen
 
-from GetDataFromAPI.transform import convert_item, duplicate_key
+from GetDataFromAPI.transform import convert_item, duplicate_key, parse_timestamp
 
 logger = logging.getLogger(__name__)
 SERVICE_FIELDS = (
@@ -181,7 +181,12 @@ def write_candidate(path, records):
             temporary = Path(handle.name)
             writer = csv.DictWriter(handle, fieldnames=COLUMNS, delimiter=";")
             writer.writeheader()
-            writer.writerows(records)
+            for record in records:
+                row = dict(record)
+                timestamp = parse_timestamp(row.get("updated_at"))
+                if timestamp is not None:
+                    row["updated_at"] = timestamp.strftime("%Y-%m-%d %H:%M:%S")
+                writer.writerow(row)
             handle.flush()
             os.fsync(handle.fileno())
         os.replace(temporary, path)

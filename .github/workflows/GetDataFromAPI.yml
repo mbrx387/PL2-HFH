@@ -41,18 +41,9 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - run: pip install -r app/requirements.txt -r requirements-dev.txt
+      - run: pip install -r app/requirements.txt -r requirements-dev.txt -r GetDataFromAPI/requirements.txt
       - run: ruff check .
-      - run: pytest -q
-      - name: Generate example exports / Beispielexporte erstellen
-        run: python -m GetDataFromAPI.demo
-      - name: Review exports before merge / Exporte vor Merge pruefen
-        uses: actions/upload-artifact@v4
-        with:
-          name: example-exports-${{ github.run_id }}
-          path: build/GetDataFromAPI/demo/*
-          if-no-files-found: error
-          retention-days: 14
+      - run: pytest -q --basetemp=build/pytest
 
   import:
     needs: validate
