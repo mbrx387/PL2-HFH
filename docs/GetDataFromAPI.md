@@ -218,32 +218,24 @@ write error leaves the completed report exports available and returns failure.
 The runner copy is not an automatic Git commit, server deployment or database import.
 
 
-## Datenstand im Git-Repository aktualisieren
+## Übergabe ausschließlich als GitHub-Artefakt
 
-Nach erfolgreichem geplantem Samstagsimport auf main lädt die Pipeline zunächst
-alle Exporte als Artefakt hoch. Bei geänderter app/data/pflegestellen.csv erstellt
-sie anschließend einen eigenen codex/pflegestellen-RUNID-VERSUCH-Branch, committet
-nur diese CSV und öffnet einen Pull Request nach main. Kein automatischer Merge.
-Ohne CSV-Unterschied entsteht kein Daten-Commit. Manuelle Läufe und Läufe anderer Branches erzeugen
-keinen Daten-PR. Beim Rerun können weitere Daten-PRs entstehen; bestehende offene
-Vorschläge vor dem Merge vergleichen und überholte PRs schließen.
+Erfolgreiche manuelle und geplante ETL-Läufe stellen CSV, Excel und JSON als
+`pflegestellen-<Lauf-ID>` unter Actions → GetDataFromAPI → Lauf → Artifacts bereit.
+Die gewünschte Aufbewahrung beträgt 90 Tage, abhängig von Repository-Limits.
+Es werden keine Daten-Branches, Daten-Commits oder Daten-Pull-Requests erstellt.
+Die Pipeline benötigt keine Repository-/PR-Schreibrechte und löst durch die
+Datenbereitstellung kein Deployment aus. Die Einstellung zur PR-Erstellung durch
+Actions wird für diese Pipeline nicht benötigt.
 
-Voraussetzung: Settings → Actions → General → Workflow permissions →
-Allow GitHub Actions to create and approve pull requests muss aktiviert sein.
-Der Importjob benötigt contents: write und pull-requests: write; die Prüfjobs
-bleiben lesend. Ein Fehler bei Push/PR-Erstellung lässt das schon hochgeladene
-Datenartefakt verfügbar und markiert den Lauf als fehlgeschlagen.
+Der Kollege lädt das aktuelle erfolgreiche Artefakt manuell oder per eigenem
+Sonntagsjob und übernimmt den PostgreSQL-Import. Sein Job soll Lauf-ID und Alter
+prüfen, veraltete/fehlgeschlagene Exporte nicht übernehmen und dieselbe Lauf-ID
+nicht mehrfach importieren. Dieser Sonntagsjob ist nicht Teil unserer Pipeline.
 
-Bei mit GITHUB_TOKEN erstellten PRs können die PR-Workflows eine Freigabe benötigen;
-Prüfungen im PR ansehen und freigeben, nicht ungeprüft mergen.
-Referenz: https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow
-Erst nach dem genehmigten Merge sehen Kollegen die neue CSV durch git pull.
-PostgreSQL wird weiterhin ausschließlich durch den Importverantwortlichen aktualisiert.
+### Artifact-only handoff (English)
 
-### Repository data updates (English)
-
-Only successful scheduled Saturday imports on main propose the changed CSV through a dedicated data
-branch and PR. Only app/data/pflegestellen.csv is committed, never reports or secrets.
-There is no automatic merge. Enable Actions PR creation in repository settings and
-approve the resulting PR workflow runs where required. Artifacts remain available
-if PR creation fails. Database loading stays with the import owner.
+Successful scheduled and manual imports upload the data as a GitHub Actions
+artifact. There are no automated data commits, pushes, branches or pull requests.
+The import owner downloads the latest successful current export and handles the
+PostgreSQL import separately. Repository data delivery does not trigger deployment.
