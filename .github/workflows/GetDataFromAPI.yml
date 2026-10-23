@@ -49,10 +49,6 @@ jobs:
           pytest -q --basetemp=build/pytest
 
   import:
-    permissions:
-      contents: write
-      actions: read
-      pull-requests: write
     needs: validate
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
@@ -89,36 +85,6 @@ jobs:
             build/GetDataFromAPI/*.xlsx
           if-no-files-found: error
           retention-days: 90
-      - name: Propose CSV update / CSV-Aktualisierung vorschlagen
-        if: github.event_name == 'schedule' && github.ref == 'refs/heads/main'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-          if git diff --quiet -- app/data/pflegestellen.csv; then
-            echo 'CSV unchanged / CSV unveraendert.' >> "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-          branch="codex/pflegestellen-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          git switch -c "$branch"
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add -- app/data/pflegestellen.csv
-          git commit -m 'data: update succeeded'
-          git push origin "HEAD:refs/heads/$branch"
-          cat > "$RUNNER_TEMP/data-pr-body.txt" <<'BODY'
-          Aktualisiert app/data/pflegestellen.csv nach einem erfolgreichen ETL-Lauf.
-
-          Daten wurden vor der Bereitstellung validiert. Excel-/JSON-Vergleiche
-          stehen im zugehoerigen Workflow-Artefakt bereit. Bitte Aenderungen und
-          PR-Pruefungen vor dem Merge kontrollieren; kein automatischer Merge.
-          Der Datenbankimport bleibt ein separater Schritt.
-          BODY
-          url="$(gh pr create --base main --head "$branch" \
-            --title 'Daten: aktuellen Pflegestellenbestand uebernehmen' \
-            --body-file "$RUNNER_TEMP/data-pr-body.txt")"
-          echo "Datenaktualisierung zur Freigabe: $url" >> "$GITHUB_STEP_SUMMARY"
       - name: Failure summary / Fehlerzusammenfassung
         if: failure()
         run: |
