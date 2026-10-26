@@ -1,41 +1,47 @@
-"""In-Memory-Datenbank auf Basis von SQLAlchemy + SQLite.
+"""SQLAlchemy connection and request-scoped sessions for PostgreSQL."""
 
-Warum SQLite ":memory:" statt eines simplen Python-dicts/list?
-- Wir bekommen echtes SQL (Filtern, Suche, Sortierung, Indizes) ohne eigenen
-  Filter-Code schreiben zu muessen.
-- Der Wechsel auf einen "richtigen" Server (Postgres/MySQL) ist spaeter nur
-  eine Aenderung der Connection-URL, da wir ueber SQLAlchemy-Modelle
-  (siehe models.py) und nicht ueber Rohdaten-Strukturen arbeiten.
-- Die Datenbank ist bewusst zustandslos: Beim Start wird sie aus der
-  mitgelieferten CSV-Datei (app/data/pflegestellen.csv) befuellt. Das macht
-  Container austauschbar/horizontal skalierbar und verhindert, dass wir uns
-  auf einer In-Memory-DB "Datenverlust" beim Neustart als echtes Risiko
-  einhandeln - die Quelle der Wahrheit ist die versionierte CSV-Datei, nicht
-  der Arbeitsspeicher eines einzelnen Containers.
-
-Fuer den Produktivbetrieb mit mehreren Nutzern/mehreren Instanzen ist eine
-persistente DB (Postgres) der naechste sinnvolle Schritt - siehe README,
-Abschnitt "Naechste Schritte".
-"""
-from sqlalchemy import create_engine
+from sqlalchemy import URL, create_engine, make_url
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 from sqlalchemy.pool import StaticPool
 
-# StaticPool + check_same_thread=False: Standardmuster, damit alle
-# FastAPI-Requests (verschiedene Threads) dieselbe In-Memory-SQLite-Instanz
-# statt jeweils eine neue, leere Datenbank sehen.
-engine = create_engine(
-    "sqlite://",
-    connect_args={"check_same_thread": False},
-    poolclass=StaticPool,
-    future=True,
-)
+from app.config import get_settings
 
-SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
+
+def _create_engine(database_url: str | URL | None = None):
+    settings = get_settings()
+    raw_url = database_url or settings.database_url or URL.create(
+        "postgresql+psycopg",
+        username=settings.app_db_user,
+        password=settings.app_db_password,
+        host=settings.app_db_host,
+        port=settings.app_db_port,
+        database=settings.app_db_name,
+    )
+    url = make_url(raw_url) if isinstance(raw_url, str) else raw_url
+    options: dict[str, object] = {"future": True}
+    if url.get_backend_name() == "sqlite":
+        options["connect_args"] = {"check_same_thread": False}
+        if url.database in (None, "", ":memory:"):
+            options["poolclass"] = StaticPool
+    else:
+        options["pool_pre_ping"] = True
+    return create_engine(url, **options)
+
+
+engine = _create_engine()
+SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
 
 class Base(DeclarativeBase):
     pass
+
+
+def configure_database(database_url: str | URL | None = None) -> None:
+    """Reconfigure the database engine; primarily useful for isolated tests."""
+    global engine, SessionLocal
+    engine.dispose()
+    engine = _create_engine(database_url)
+    SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
 
 def get_db():

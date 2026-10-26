@@ -28,8 +28,14 @@ class Settings(BaseSettings):
     # API von einem separaten Frontend-Origin aus angesprochen wird).
     allowed_origins: str = "http://localhost:8000"
 
-    # Pfad zur Seed-Datei, aus der die In-Memory-Datenbank beim Start befuellt wird.
-    data_file: str = "app/data/pflegestellen.csv"
+    # PostgreSQL-Verbindung. Compose setzt den Hostnamen des app-db-Dienstes;
+    # SQLAlchemy URL.create uebernimmt die sichere Behandlung des Passworts.
+    app_db_host: str = "localhost"
+    app_db_port: int = 5432
+    app_db_name: str = "pflegedb"
+    app_db_user: str = "pl2"
+    app_db_password: str = ""
+    database_url: str | None = None
 
     # Schluessel zum Signieren des Session-Cookies (Login-Zustand). MUSS in
     # der Produktivumgebung ueberschrieben werden - siehe main.py, wo bei

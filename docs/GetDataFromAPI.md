@@ -58,6 +58,35 @@ denselben Ausgabeordner starten. Ein Extraktionsfehler verändert keine Exportda
 CSV und Berichte vor Übernahme fachlich prüfen; Übernahme der CSV in die App erfolgt
 per PR und erfolgreichem Deployment, nicht automatisch in eine Live-Datenbank.
 
+## Letztes Artifact lokal abrufen
+
+`scripts/fetch_latest_getdatafromapi_artifact.py` sucht das neueste unverfallene
+`pflegestellen-*`-Artifact des Branches `main` in diesem GitHub-Repository. Ist
+dessen Artifact-ID noch nicht lokal verarbeitet, wird das ZIP geladen und genau
+die enthaltene `pflegestellen.csv` nach `db/temp/pflegestellen.csv` kopiert.
+Die ID wird daneben in `.last_getdatafromapi_artifact` gespeichert; wiederholte
+Aufrufe laden dasselbe Artifact nicht erneut. Der CSV-Austausch erfolgt erst nach
+erfolgreichem Download und Prüfung des ZIP-Inhalts.
+
+```bash
+GH_TOKEN=github_token GH_REPO=mbrx387/PL2-HFH \
+  python scripts/fetch_latest_getdatafromapi_artifact.py
+```
+
+Der Token benötigt Leserechte für Actions-Artifacts (Repository-Berechtigung
+`Actions: Read`). Alternativ kann `GITHUB_TOKEN` gesetzt werden. Bei einem
+manuellen lokalen Aufruf wird das neueste verfügbare Artifact gegen die lokal
+gespeicherte ID verglichen; eine altersabhängige Frischegrenze wird nicht
+erzwungen.
+
+Im GitHub-Workflow wird der Abruf nach dem ETL-Export auf `main` mit der
+aktuellen `GITHUB_RUN_ID` ausgeführt, damit genau das gerade erzeugte Artifact
+verwendet wird. Die bereitgestellte CSV wird zusätzlich als
+`pflegestellen-db-temp-*`-Artifact hochgeladen und 90 Tage aufbewahrt. Sie liegt
+damit nicht dauerhaft auf dem GitHub-Runner oder automatisch in einer
+Produktionsdatenbank. Der geplante Workflow startet samstags um 03:00 UTC
+(04:00 MEZ bzw. 05:00 MESZ).
+
 ## Pipeline vor dem Merge
 
 `.github/workflows/GetDataFromAPI.yml` prüft relevante Änderungen bei Push auf
@@ -67,8 +96,8 @@ Die Tests prüfen Wiederholungen, CLI, beschädigte Eingaben, IDs, CSV-Kompatibi
 Excel/JSON, Differenzen, Rotation und Schutz bei Schreibfehlern. pytest nutzt
 `.pytest_tmp` im Projekt, um gesperrte Windows-Tempverzeichnisse zu vermeiden.
 
-Echte Importe laufen nur per `workflow_dispatch` oder samstags 02:00 UTC
-(03:00 Winterzeit / 04:00 Sommerzeit in Wien), nach erfolgreicher Validierung.
+Echte Importe laufen nur per `workflow_dispatch` oder samstags 03:00 UTC
+(04:00 MEZ / 05:00 MESZ), nach erfolgreicher Validierung.
 Zeitpläne werden erst auf dem Default-Branch aktiv und können bei GitHub verzögert
 starten. Repository-Secret `ZQP_API_URL` einrichten. Importjob installiert seine
 Excel-Abhängigkeit separat aus `GetDataFromAPI/requirements.txt`.
@@ -139,7 +168,7 @@ synchronization. Branch pushes and PRs run lint and all tests
 before merge. Enforcing required checks additionally needs a main branch protection
 rule configured by a repository administrator.
 
-Live import runs manually or Saturdays at 02:00 UTC after validation. Set repository
+Live import runs manually or Saturdays at 03:00 UTC after validation. Set repository
 secret `ZQP_API_URL`. Scheduled execution starts on the default branch and can be
 delayed. Restore the latest available live artifact from the same branch to retain
 state across runners; retention is up to 90 days subject to repository policies.
@@ -155,7 +184,7 @@ persistent failures and retain last reviewed data. Logs omit endpoint tokens/pay
 The complete local live run processed 3,339 requests: 4,092 old and 4,097 new records, 691 comparison rows and 17 rejected hits. Excel/JSON were reopened and checked, including Excel date formatting. Scheduled live execution and notification delivery still need verification.
 
 
-## Übergabe an PostgreSQL (Branch gab_pflegedb)
+## Automatischer Import in PostgreSQL
 
 Die CSV ist auf `db/import_centers.sql` aus dem Kollegenbranch abgestimmt.
 Die 20 Spalten und deren Reihenfolge bleiben erhalten: Semikolon, UTF-8 mit BOM,
@@ -166,29 +195,49 @@ im CSV-Export nach UTC umgerechnet; historische Zeitstempel ohne Zeitzone bleibe
 unverändert. PLZ und Telefonnummern bleiben Text. Details stehen in
 `GetDataFromAPI/postgresql_contract.json`.
 
-Der Importverantwortliche kopiert die neue CSV im Projektordner:
+Nach erfolgreichem ETL-Lauf kopiert der Workflow die CSV auf `main` per SSH/SCP
+nach `/opt/pl2-hfh/db/temp/pflegestellen.csv` auf den Deployment-Server. Danach
+kopiert er sie in den Container `app-db:/tmp/pflegestellen.csv` und führt dort
+das versionierte SQL-Skript mit `psql -v ON_ERROR_STOP=1` aus. Der SQL-Import
+läuft transaktional: Datensätze mit bestehender `unsere_id` werden aktualisiert,
+neue IDs eingefügt und die Angebotszuordnungen der importierten Stellen ersetzt.
+Nicht in der CSV enthaltene Stellen werden nicht gelöscht.
+
+Voraussetzungen auf dem Server:
+- `/opt/pl2-hfh` enthält die aktuelle Version des Repositories einschließlich
+  `db/import_centers.sql`.
+- `docker compose` kennt den laufenden PostgreSQL-Service `app-db` mit Datenbank
+  `pflegedb`, Benutzer `pl2` und dem Schema aus `db/init/001_create_centers.sql`.
+- GitHub Actions Secrets `SSH_HOST`, `SSH_USER` und `SSH_PRIVATE_KEY` sind wie
+  für den Deploy-Workflow eingerichtet; der SSH-Benutzer darf den Compose-Stack
+  bedienen.
+
+Das SQL-Skript bricht bei einem Fehler ab; durch `ON_ERROR_STOP` schlägt dann
+auch der Workflow fehl. Die Actions-Datei `pflegestellen-db-temp-*` bleibt
+zusätzlich 90 Tage als Download verfügbar. Der zeitgesteuerte Workflow läuft
+samstags um 03:00 UTC.
+
+Die FastAPI-App liest die Verzeichnisdaten aus derselben PostgreSQL-Datenbank.
+Nach erfolgreichem Import stehen Änderungen ohne erneuten App-Start in der UI
+zur Verfügung.
 
 ```sh
-docker compose cp app/data/pflegestellen.csv app-db:/tmp/pflegestellen.csv
+docker compose cp db/temp/pflegestellen.csv app-db:/tmp/pflegestellen.csv
+docker compose exec -T app-db psql -v ON_ERROR_STOP=1 -U pl2 -d pflegedb \
+  < db/import_centers.sql
 ```
-
-Voraussetzung sind Docker Compose, die Compose-Konfiguration aus dem Datenbankbranch
-und der laufende Container. Die CSV muss durch einen erfolgreichen lokalen ETL-Lauf
-oder durch Entpacken des GitHub-Artefakts vorliegen. Die ETL-Pipeline führt diesen
-Kopiervorgang nicht automatisch aus.
-
-Anschließend führt der Importverantwortliche sein unverändertes
-`db/import_centers.sql` gemäß seiner Datenbankanleitung aus. Der Kopiervorgang führt
-kein SQL aus und bestätigt keinen erfolgreichen Datenbankimport. Erst nach erfolgreichem
-Import und Prüfung der Datensätze darf „Datenbank aktualisiert“ gemeldet werden.
-Ein echter PostgreSQL-Import ist auf unserem ETL-Branch noch nicht geprüft.
 
 ### PostgreSQL handoff (English)
 
-Use the existing `db/import_centers.sql` from gab_pflegedb unchanged. Copy the ETL CSV with `docker compose cp` into app-db at
-`/tmp/pflegestellen.csv`. This copy does not execute SQL. The import owner then runs and verifies the existing transactional importer.
-CSV column order, semicolon delimiter, 0/1 flags and text postal/phone fields are
-preserved. IDs map to integer and source dates to timestamp without time zone.
+After a successful ETL run on `main`, the workflow copies the CSV by SSH/SCP to
+`/opt/pl2-hfh/db/temp/pflegestellen.csv`, copies it into `app-db`, and runs
+`db/import_centers.sql` with `psql -v ON_ERROR_STOP=1`. Existing IDs are updated,
+new IDs are inserted, imported centers' service mappings are replaced, and rows
+absent from the CSV are not deleted. The server must have the `app-db` Compose
+service, the expected schema/database/user, and the existing `SSH_HOST`,
+`SSH_USER`, and `SSH_PRIVATE_KEY` Actions secrets. The FastAPI app reads the same
+PostgreSQL database, so imported changes become available in the UI without an
+app restart.
 
 
 ## CSV am vereinbarten Übergabeort

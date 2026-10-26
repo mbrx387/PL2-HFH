@@ -1,4 +1,22 @@
 services:
+  app-db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: pflegedb
+      POSTGRES_USER: pl2
+      POSTGRES_PASSWORD: ${APP_DB_PASSWORD:?set-in-.env}
+    volumes:
+      - app-db-data:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pl2 -d pflegedb"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - internal
+
   app:
     # IMAGE_TAG wird vom Deploy-Workflow auf den Commit-SHA gesetzt (reproduzierbar,
     # Rollback = alten Tag in .env eintragen). Lokal reicht der Default/build.
@@ -8,6 +26,14 @@ services:
       dockerfile: app/Dockerfile
     env_file:
       - .env
+    environment:
+      APP_DB_HOST: app-db
+      APP_DB_PORT: 5432
+      APP_DB_NAME: pflegedb
+      APP_DB_USER: pl2
+    depends_on:
+      app-db:
+        condition: service_healthy
     restart: unless-stopped
     expose:
       - "8000" # nur im internen Docker-Netzwerk erreichbar, nicht am Host
@@ -112,6 +138,7 @@ services:
       - internal
 
 volumes:
+  app-db-data:
   keycloak-db-data:
 
 networks:

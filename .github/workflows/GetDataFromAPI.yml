@@ -85,6 +85,60 @@ jobs:
             build/GetDataFromAPI/*.xlsx
           if-no-files-found: error
           retention-days: 90
+      - name: Stage CSV in db/temp / CSV in db/temp bereitstellen
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          python scripts/fetch_latest_getdatafromapi_artifact.py \
+            --run-id "$GITHUB_RUN_ID"
+      - name: Upload db/temp handoff / db/temp-Uebergabe hochladen
+        if: github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: pflegestellen-db-temp-${{ github.run_id }}-${{ github.run_attempt }}
+          path: db/temp/pflegestellen.csv
+          if-no-files-found: error
+          retention-days: 90
+      - name: Prepare database server / Datenbankserver vorbereiten
+        if: github.ref == 'refs/heads/main'
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            set -eu
+            cd /opt/pl2-hfh
+            test -s db/import_centers.sql
+            docker compose config --services | grep -Fxq app-db
+            mkdir -p db/temp
+      - name: Copy CSV to database server / CSV zum Datenbankserver kopieren
+        if: github.ref == 'refs/heads/main'
+        uses: appleboy/scp-action@v1
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: db/temp/pflegestellen.csv
+          target: /opt/pl2-hfh/db/temp
+          overwrite: true
+      - name: Import CSV into PostgreSQL / CSV in PostgreSQL importieren
+        if: github.ref == 'refs/heads/main'
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            set -eu
+            cd /opt/pl2-hfh
+            test -s db/temp/pflegestellen.csv
+            test -s db/import_centers.sql
+            docker compose cp db/temp/pflegestellen.csv app-db:/tmp/pflegestellen.csv
+            docker compose exec -T app-db psql -v ON_ERROR_STOP=1 -U pl2 -d pflegedb \
+              < db/import_centers.sql
       - name: Failure summary / Fehlerzusammenfassung
         if: failure()
         run: |

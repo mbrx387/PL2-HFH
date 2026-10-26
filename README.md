@@ -21,7 +21,7 @@ Projekts; Datenmodell/Fachlogik werden im Team weiter ausgebaut (siehe
 | Frage | Entscheidung | Warum |
 |---|---|---|
 | Framework | **FastAPI (Python)** | Klein, schnell erlernbar, automatische OpenAPI-Doku unter `/api/docs`, native Typvalidierung (Pydantic), asynchron-fähig, sehr verbreitet – gute Basis für ein Hochschulprojekt mit wechselnden Mitwirkenden. |
-| Datenhaltung | **In-Memory-SQLite über SQLAlchemy**, befüllt aus einer versionierten CSV-Datei | Kein eigener DB-Server nötig (Vorgabe: „kein MySQL-Server o.ä.“), aber trotzdem echtes SQL (Filtern/Suchen/Sortieren) statt Handstricken auf Listen. Migration auf Postgres/MySQL später ist nur ein Wechsel der Connection-URL, da über SQLAlchemy-Modelle gearbeitet wird. |
+| Datenhaltung | **PostgreSQL über SQLAlchemy**, Tabellen `centers`, `services` und `center_services`; initialisiert aus dem ETL-CSV-Import | Persistente Daten und eine gemeinsame Datenquelle für App und Importjob. PostgreSQL bleibt nur im internen Compose-Netzwerk erreichbar. |
 | Frontend | **Server-gerenderte Jinja2-Seite + Vanilla JS**, kein SPA-Framework | Kein Build-Schritt, kein Node-Toolchain-Overhead im Container, niedrige Einstiegshürde fürs Team, für den beschriebenen Funktionsumfang (Liste + Checkboxen + Filter) ausreichend. |
 | Mailversand | **`mailto:`-Link im Browser** statt serverseitigem SMTP-Versand | Erfüllt die Vorgabe „über die eigene Standardmailbox versenden“ exakt, UND: der Server verarbeitet dadurch keine SMTP-Zugangsdaten, protokolliert keine E-Mail-Inhalte und hat keinen Angriffsvektor „Mailrelay-Missbrauch“. Sicherheits- und Datenschutzvorteil in einem. |
 | Containerisierung | **Docker Compose** (nicht Swarm/Kubernetes) | Ein Ubuntu-Server, überschaubare Last, kleines Team. Docker Compose deckt „App + Reverse Proxy (+ optional SSO)“ vollständig ab, ohne die Betriebskomplexität eines Cluster-Orchestrators. Migration zu Swarm/K8s bleibt möglich, ist aber aktuell nicht gerechtfertigt (siehe Abschnitt 4). |
@@ -37,15 +37,14 @@ PL2-HFH/
 ├── app/                        # FastAPI-Anwendung (Python-Package "app")
 │   ├── main.py                 # Einstiegspunkt, Startup/Lifespan, Routing, Middleware-Reihenfolge
 │   ├── config.py                # Einstellungen aus Umgebungsvariablen (.env)
-│   ├── database.py              # In-Memory-SQLite-Engine (SQLAlchemy)
-│   ├── models.py                 # ORM-Modell "Center"
+│   ├── database.py              # PostgreSQL-Engine und SQLAlchemy-Sessions
+│   ├── models.py                 # ORM-Modelle Center, Service und Zuordnung
 │   ├── schemas.py                # Pydantic-Response-Schemas
-│   ├── seed.py                   # Befüllt die DB aus app/data/*.csv beim Start
 │   ├── security.py               # Security-Header-Middleware
 │   ├── auth.py                   # OIDC-Login (Keycloak), Login-Pflicht-Middleware
 │   ├── gunicorn_worker.py        # Proxy-Header-fähiger Uvicorn-Worker (siehe auth.py)
 │   ├── routers/centers.py        # GET /api/centers, /api/bundeslaender
-│   ├── data/pflegestellen.csv    # Seed-/Demodaten (Quelle der Wahrheit)
+│   ├── data/pflegestellen.csv    # versionierter Ausgangs-/Demo-Datensatz
 │   ├── templates/index.html      # Server-gerenderte Startseite
 │   ├── static/css/style.css
 │   ├── static/js/app.js          # Liste laden, filtern, mailto-Link bauen
@@ -67,17 +66,13 @@ PL2-HFH/
 
 ## 3. Datenquelle
 
-`app/data/pflegestellen.csv` enthält ~4.090 Beratungs-/Pflegestellen
-(Name, Adresse, PLZ/Ort/Bundesland, Kontakt, Geokoordinaten, Angebotsarten)
-aus dem Datenimport im Branch `pflegestellen` dieses Repos. Sie dient hier
-als realistischer Demo-/Startdatensatz für das Grundgerüst und ist die
-**einzige** Kopie im Repo. Die Spalte `unsere_id` wird als stabile Primär-ID
-übernommen, d.h. IDs ändern sich nicht, wenn Zeilen umsortiert werden. Die Datei ist
-bewusst versioniert (statt z.B. in einem Volume abgelegt): Sie ist die
-**Quelle der Wahrheit**, aus der die In-Memory-Datenbank bei jedem
-Containerstart neu aufgebaut wird. Das macht App-Instanzen zustandslos und
-austauschbar und macht "Datenverlust bei Neustart" (typisches Risiko einer
-In-Memory-DB) irrelevant.
+`app/data/pflegestellen.csv` ist ein versionierter Ausgangs-/Demo-Datensatz.
+Der wöchentliche ETL-Workflow importiert neue Daten transaktional mit
+`db/import_centers.sql` in die persistente PostgreSQL-Datenbank `app-db`.
+Die Web-App liest direkt aus denselben Tabellen; sie lädt oder überschreibt
+die Daten nicht beim Start. `unsere_id` wird als stabile `centers.id`
+übernommen. Das PostgreSQL-Volume `app-db-data` bleibt über Container-Neustarts
+erhalten.
 
 ## 4. Hosting-Konzept
 
@@ -95,8 +90,12 @@ Internet
 │  │   nginx    │◄────►│   FastAPI-App   │ │
 │  │ (TLS-Proxy)│      │ (Gunicorn+      │ │
 │  │ Port 80/443│      │  Uvicorn-Worker)│ │
-│  └────────────┘      │  In-Memory-DB   │ │
-│        ▲              └────────────────┘ │
+│  └────────────┘      └──────┬─────────┘ │
+│                              │           │
+│                       ┌──────▼─────────┐ │
+│                       │    app-db       │ │
+│                       │  PostgreSQL     │ │
+│                       └────────────────┘ │
 │        │ Compose-Profil "sso"            │
 │  ┌────────────┐                          │
 │  │  Keycloak  │  (Login, /idp/…)        │
@@ -191,10 +190,8 @@ nachträglich aufgesetzt:
   Login hat vollen Zugriff auf alle Funktionen. Für ein reines
   Beratungsstellen-Verzeichnis vertretbar, sollte aber vor produktivem
   Einsatz mit sensibleren Daten überdacht werden.
-- Die In-Memory-Datenbank verliert ihren Zustand bei jedem Neustart –
-  gewollt, da sie aus der versionierten CSV neu aufgebaut wird. Nutzerbezogene
-  Zustände (z.B. „gemerkte Auswahl über Sessions hinweg“) gibt es entsprechend
-  noch nicht.
+- Nutzerbezogene Zustände (z.B. „gemerkte Auswahl über Sessions hinweg“) gibt
+  es noch nicht. Die Verzeichnisdaten selbst liegen persistent in PostgreSQL.
 
 ## 7. Lokal starten
 
@@ -205,7 +202,8 @@ Keycloak *vor* der App. Server-Variante: [Abschnitt 8](#8-server-inbetriebnahme)
 
 ```bash
 cp .env.example .env
-# In .env setzen: SECRET_KEY, KEYCLOAK_ADMIN_PASSWORD, KEYCLOAK_DB_PASSWORD
+# In .env setzen: SECRET_KEY, APP_DB_PASSWORD,
+# KEYCLOAK_ADMIN_PASSWORD, KEYCLOAK_DB_PASSWORD
 # (je: openssl rand -base64 32), ausserdem fuer lokal:
 #   APP_PUBLIC_URL=https://localhost
 #   KC_HOSTNAME=https://localhost/idp
@@ -220,6 +218,10 @@ docker compose --profile sso up -d keycloak   # 1) nur Keycloak (+ DB) starten
 # -> Credentials -> Client secret. In .env als OIDC_CLIENT_SECRET eintragen.
 
 docker compose --profile sso up -d --build    # 2) jetzt App + nginx starten
+# Beim ersten Start die Datenbank einmal befuellen:
+docker compose cp app/data/pflegestellen.csv app-db:/tmp/pflegestellen.csv
+docker compose exec -T app-db psql -v ON_ERROR_STOP=1 -U pl2 -d pflegedb \
+  < db/import_centers.sql
 # -> https://localhost (Zertifikatswarnung ist bei selbstsigniertem Zertifikat normal)
 # -> Login-Redirect zu Keycloak; Demo-Zugang: demo / demo1234
 ```
@@ -231,6 +233,10 @@ cp .env.example .env
 sed -i 's/AUTH_ENABLED=true/AUTH_ENABLED=false/' .env
 ./scripts/generate_dev_cert.sh
 docker compose up --build       # kein --profile sso nötig
+# Beim ersten Start die Datenbank einmal befuellen:
+docker compose cp app/data/pflegestellen.csv app-db:/tmp/pflegestellen.csv
+docker compose exec -T app-db psql -v ON_ERROR_STOP=1 -U pl2 -d pflegedb \
+  < db/import_centers.sql
 # -> https://localhost, ohne Login erreichbar (Warnung dazu steht im Log)
 ```
 
@@ -239,6 +245,7 @@ docker compose up --build       # kein --profile sso nötig
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r app/requirements.txt -r requirements-dev.txt
+# PostgreSQL muss laufen, initialisiertes Schema und APP_DB_PASSWORD in .env.
 AUTH_ENABLED=false uvicorn app.main:app --reload
 # -> http://localhost:8000
 ```
