@@ -63,7 +63,7 @@ def test_failed_extraction_preserves_both_files(tmp_path):
     assert output.read_text() == "last successful candidate"
 
 
-def test_successful_run_produces_app_compatible_csv(tmp_path):
+def test_successful_run_produces_postgres_import_compatible_csv(tmp_path):
     original, output = tmp_path / "baseline.csv", tmp_path / "out.csv"
     write_candidate(original, baseline())
     assert (
@@ -76,17 +76,9 @@ def test_successful_run_produces_app_compatible_csv(tmp_path):
         )
         == 1
     )
-    assert read_baseline(output)[0]["unsere_id"] == "42"
-    from sqlalchemy.orm import Session
-
-    from app.database import Base, engine
-    from app.models import Center
-    from app.seed import load_centers_from_csv
-
-    Base.metadata.create_all(engine)
-    with Session(engine) as db:
-        assert load_centers_from_csv(db, str(output)) == 1
-        assert db.get(Center, 42).name == "Updated"
+    records = read_baseline(output)
+    assert records[0]["unsere_id"] == "42"
+    assert records[0]["name"] == "Updated"
 
 
 @pytest.mark.parametrize("payload", [b"{}", b'{"data": {}}', b'{"data": [1]}', b"not json"])

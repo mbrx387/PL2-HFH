@@ -166,7 +166,7 @@ jobs:
             missing=""
             for key in SECRET_KEY APP_PUBLIC_URL ALLOWED_ORIGINS \
                        OIDC_ISSUER OIDC_CLIENT_ID OIDC_CLIENT_SECRET OIDC_ISSUER_INTERNAL \
-                       KEYCLOAK_ADMIN_PASSWORD KEYCLOAK_DB_PASSWORD KC_HOSTNAME; do
+                       KEYCLOAK_ADMIN_PASSWORD KEYCLOAK_DB_PASSWORD APP_DB_PASSWORD KC_HOSTNAME; do
               value="$(grep -E "^${key}=" .env | tail -n1 | cut -d= -f2-)"
               case "$value" in
                 ""|change-me|*example.org*) missing="$missing $key" ;;

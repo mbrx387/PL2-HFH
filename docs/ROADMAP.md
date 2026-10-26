@@ -15,7 +15,8 @@ Betriebsanleitung (Server-Inbetriebnahme, Keycloak): siehe
   Filtern (Bundesland, Angebot) und Mehrfachauswahl
 - Sammel-E-Mail über das eigene Mailprogramm (`mailto:`), kein Mailversand
   durch den Server
-- In-Memory-SQLite, beim Start aus versionierter CSV befüllt; stabile IDs
+- Persistentes PostgreSQL (`app-db`): Web-App liest `centers`, `services` und
+  `center_services`; der ETL-Workflow aktualisiert dieselben Tabellen
 - API mit Eingabevalidierung und Begrenzung der Ergebnisgröße
 
 **Login / SSO**
@@ -30,7 +31,8 @@ Betriebsanleitung (Server-Inbetriebnahme, Keycloak): siehe
 - Admin-Konsole nur per SSH-Tunnel erreichbar (öffentlich gesperrt)
 
 **Infrastruktur & Sicherheit**
-- Docker Compose: App, nginx, Keycloak, Postgres in internem Netzwerk
+- Docker Compose: App, nginx, Keycloak und getrennte PostgreSQL-Datenbanken
+  (`app-db`, `keycloak-db`) im internen Netzwerk
 - nginx als TLS-Reverse-Proxy mit Rate-Limiting
 - Security-Header (CSP u. a.), Container als Non-Root mit Read-only-Dateisystem
   und Ressourcenlimits
@@ -39,7 +41,7 @@ Betriebsanleitung (Server-Inbetriebnahme, Keycloak): siehe
 - GitHub Actions: Lint + Tests → Image-Build (GHCR, Commit-SHA-Tag) →
   Deploy per SSH → Health-Check
 - Vorab-Prüfung der Server-`.env` und Zertifikate mit klaren Fehlermeldungen
-- 17 automatisierte Tests (Pytest), Linting (ruff)
+- Automatisierte Tests (Pytest), Linting (ruff)
 - Dependabot + Dependency Graph für alle Abhängigkeiten
 - Gitleaks-Pre-Commit-Hook gegen versehentlich eingecheckte Secrets
 
@@ -74,8 +76,6 @@ Betriebsanleitung (Server-Inbetriebnahme, Keycloak): siehe
 - [ ] Strukturiertes Logging und Uptime-Monitoring
 
 ### Später / optional
-- [ ] Persistente Datenbank (Postgres) für die App, sobald Daten im System
-      bearbeitet werden sollen
 - [ ] Automatischer Daten-Sync aus einer offiziellen Quelle statt CSV-Pflege
 - [ ] Warnung/Aufteilung bei sehr vielen E-Mail-Empfängern (`mailto:`-Längenlimit)
 - [ ] Kartenansicht (Geokoordinaten sind vorhanden)

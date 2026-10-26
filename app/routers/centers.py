@@ -11,15 +11,24 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_db
-from app.models import Center
+from app.models import Center, Service
 from app.schemas import CenterListResponse, CenterOut
 
 router = APIRouter(prefix="/api", tags=["centers"])
 
 MAX_PAGE_SIZE = 500
+
+OFFER_NAMES = {
+    "pflegestuetzpunkt": "Pflegestützpunkt",
+    "pflegeberatung": "Pflegeberatung",
+    "wohnberatung": "Wohnberatung",
+    "demenzberatung": "Demenzberatung",
+    "angehoerigenberatung": "Angehörigenberatung",
+    "betreuungsberatung": "Betreuungsberatung",
+}
 
 Angebot = Literal[
     "pflegestuetzpunkt",
@@ -47,26 +56,47 @@ def list_centers(
     stmt = select(Center)
 
     if bundesland:
-        stmt = stmt.where(Center.bundesland == bundesland.upper())
+        stmt = stmt.where(func.trim(Center.bundesland) == bundesland.upper())
 
     if search and search.strip():
         like = f"%{_escape_like(search.strip())}%"
         stmt = stmt.where(
             Center.name.ilike(like, escape="\\")
             | Center.ort.ilike(like, escape="\\")
-            | Center.plz.ilike(like, escape="\\")
+            | func.trim(Center.plz).ilike(like, escape="\\")
         )
 
     if angebot:
-        stmt = stmt.where(getattr(Center, angebot).is_(True))
+        stmt = stmt.where(Center.services.any(Service.name == OFFER_NAMES[angebot]))
 
     total = db.execute(select(func.count()).select_from(stmt.subquery())).scalar_one()
-    items = db.execute(stmt.order_by(Center.ort, Center.name).offset(offset).limit(limit)).scalars().all()
+    items = (
+        db.execute(
+            stmt.options(selectinload(Center.services))
+            .order_by(Center.ort, Center.name)
+            .offset(offset)
+            .limit(limit)
+        )
+        .scalars()
+        .all()
+    )
 
-    return CenterListResponse(total=total, items=[CenterOut.model_validate(i) for i in items])
+    return CenterListResponse(
+        total=total,
+        items=[
+            CenterOut.model_validate(i).model_copy(
+                update={"plz": i.plz.strip(), "bundesland": i.bundesland.strip()}
+            )
+            for i in items
+        ],
+    )
 
 
 @router.get("/bundeslaender", response_model=list[str])
 def list_bundeslaender(db: Session = Depends(get_db)):
-    rows = db.execute(select(Center.bundesland).distinct().order_by(Center.bundesland)).scalars().all()
+    rows = db.execute(
+        select(func.trim(Center.bundesland))
+        .distinct()
+        .order_by(func.trim(Center.bundesland))
+    ).scalars().all()
     return [r for r in rows if r]
