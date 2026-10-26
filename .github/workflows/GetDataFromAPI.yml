@@ -122,7 +122,7 @@ jobs:
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           source: db/temp/pflegestellen.csv
-          target: /opt/pl2-hfh/db/temp
+          target: /opt/pl2-hfh
           overwrite: true
       - name: Import CSV into PostgreSQL / CSV in PostgreSQL importieren
         if: github.ref == 'refs/heads/main'
