@@ -44,11 +44,21 @@
       </select>
     </section>
 
+    <!-- AP5: minimale Eingabe fuer Betreff/Nachricht (IDs wie im AP6-Entwurf frontend/index.html). -->
+    <details class="mail-compose">
+      <summary>E-Mail-Text: Betreff und Nachricht</summary>
+      <label for="email-subject">Betreff</label>
+      <input id="email-subject" type="text" maxlength="255" placeholder="Anfrage Pflege-/Beratungsstelle" />
+      <label for="email-body">Nachricht (optional – bitte kurz halten, lange Texte passen nicht in einen mailto:-Link)</label>
+      <textarea id="email-body" rows="4" maxlength="1500"></textarea>
+    </details>
+
     <section class="list-meta">
       <span id="result-count">Lade Daten …</span>
       <div class="list-actions">
         <button id="select-all" type="button">Alle sichtbaren auswählen</button>
         <button id="select-none" type="button">Auswahl leeren</button>
+        <button id="mail-filtered" type="button" disabled>Alle gefilterten Treffer per E-Mail</button>
       </div>
     </section>
 
@@ -59,6 +69,7 @@
 
   <footer class="mail-bar">
     <span><strong id="selected-count">0</strong> ausgewählt</span>
+    <span id="mail-status" class="mail-status" role="status" aria-live="polite"></span>
     <button id="send-mail" type="button" disabled>
       E-Mail an Auswahl senden (öffnet Ihr Mailprogramm)
     </button>
