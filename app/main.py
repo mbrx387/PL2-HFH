@@ -13,7 +13,8 @@ from app.auth import LoginRequiredMiddleware
 from app.auth import router as auth_router
 from app.config import get_settings
 from app.database import engine
-from app.routers import centers
+from app.mail_models import ensure_mail_history_table
+from app.routers import centers, mail
 from app.security import SecurityHeadersMiddleware
 
 settings = get_settings()
@@ -64,6 +65,10 @@ async def lifespan(app: FastAPI):
             "PostgreSQL-Schema unvollstaendig; fehlende Tabellen: "
             + ", ".join(sorted(missing_tables))
         )
+    # AP5: Die einzige Tabelle, die die App selbst anlegt - und nur, falls sie
+    # fehlt. db/init/ wirkt bei bestehenden Volumes nicht mehr. Details:
+    # app/mail_models.py und docs/AP5_EMAIL_HISTORY.md.
+    ensure_mail_history_table(engine)
     logger.info("PostgreSQL-Verbindung und Schema sind bereit.")
     yield
     engine.dispose()
@@ -106,6 +111,7 @@ app.add_middleware(
 
 app.include_router(auth_router)
 app.include_router(centers.router)
+app.include_router(mail.router)
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 templates = Jinja2Templates(directory="app/templates")
 

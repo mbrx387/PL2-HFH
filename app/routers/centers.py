@@ -5,12 +5,14 @@ passiert clientseitig ueber einen mailto:-Link (siehe static/js/app.js) und
 loest damit die Standard-Mailbox des Nutzers/der Nutzerin aus. Der Server
 verarbeitet dabei keine Zugangsdaten und verschickt selbst keine E-Mails -
 das reduziert die Angriffsflaeche und den Datenschutz-Scope erheblich
-(kein SMTP-Relay, keine gespeicherten Anmeldedaten, kein Mail-Log am Server).
+(kein SMTP-Relay, keine gespeicherten Anmeldedaten). Die BCC-Aufteilung und
+die Historie der Uebergaben an das Mailprogramm (AP5) liegen in
+app/routers/mail.py; sie nutzt dieselben Filter ueber apply_center_filters().
 """
 from typing import Literal
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import func, select
+from sqlalchemy import Select, func, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_db
@@ -44,17 +46,14 @@ def _escape_like(value: str) -> str:
     return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
-@router.get("/centers", response_model=CenterListResponse)
-def list_centers(
-    db: Session = Depends(get_db),
-    search: str | None = Query(None, description="Freitextsuche in Name/Ort/PLZ"),
-    bundesland: str | None = Query(None, description="Filter auf Bundeslandkuerzel, z.B. SN"),
-    angebot: Angebot | None = Query(None, description="Filter auf ein Angebot"),
-    limit: int = Query(200, ge=1, le=MAX_PAGE_SIZE),
-    offset: int = Query(0, ge=0),
-):
-    stmt = select(Center)
-
+def apply_center_filters(
+    stmt: Select,
+    *,
+    search: str | None = None,
+    bundesland: str | None = None,
+    angebot: Angebot | None = None,
+) -> Select:
+    """Gemeinsame Filterlogik fuer die Ergebnisliste UND die AP5-Mailauswahl."""
     if bundesland:
         stmt = stmt.where(func.trim(Center.bundesland) == bundesland.upper())
 
@@ -69,7 +68,21 @@ def list_centers(
     if angebot:
         stmt = stmt.where(Center.services.any(Service.name == OFFER_NAMES[angebot]))
 
-    total = db.execute(select(func.count()).select_from(stmt.subquery())).scalar_one()
+    return stmt
+
+
+@router.get("/centers", response_model=CenterListResponse)
+def list_centers(
+    db: Session = Depends(get_db),
+    search: str | None = Query(None, description="Freitextsuche in Name/Ort/PLZ"),
+    bundesland: str | None = Query(None, description="Filter auf Bundeslandkuerzel, z.B. SN"),
+    angebot: Angebot | None = Query(None, description="Filter auf ein Angebot"),
+    limit: int = Query(200, ge=1, le=MAX_PAGE_SIZE),
+    offset: int = Query(0, ge=0),
+):
+    stmt = apply_center_filters(select(Center), search=search, bundesland=bundesland, angebot=angebot)
+
+    total =db.execute(select(func.count()).select_from(stmt.subquery())).scalar_one()
     items = (
         db.execute(
             stmt.options(selectinload(Center.services))
