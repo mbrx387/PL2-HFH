@@ -286,7 +286,26 @@ Realm-Import existiert:
      *Valid post logout redirect URIs* `<APP_PUBLIC_URL>/`
    - Credentials: *Client secret* kopieren und in `.env` als
      `OIDC_CLIENT_SECRET` eintragen.
-6. **Deploy erneut auslösen** (Actions → „Re-run failed jobs“) oder
+6. **Benutzer und Rollen einrichten:** Im Realm `hfh-pflege` unter *Users* für jede
+   Person ein eigenes Konto anlegen. Unter *Credentials* ein temporäres Passwort
+   setzen und sicher über einen freigegebenen Kanal übermitteln. Danach unter
+   *Role mapping* → *Assign role* genau eine Client-Rolle des Clients
+   `pflege-finder` zuweisen (`reader`, `editor` oder `admin`). Keine gemeinsamen
+   Konten verwenden.
+   - `reader`: Verzeichnis lesen.
+   - `editor`: lesen, anlegen, ändern und Stellen deaktivieren.
+   - `admin`: dieselben Verzeichnisrechte wie `editor`; eine Nutzerverwaltung in
+     der App gibt es nicht.
+   - Die Client-Rolle `admin` verleiht **keine** Rechte in der Keycloak-Konsole.
+     Personen, die Konten verwalten sollen, benötigen dafür eine separat und
+     gezielt freigegebene Keycloak-Berechtigung im Realm `hfh-pflege`. Den
+     globalen `master`-Admin nicht für den täglichen Betrieb verwenden.
+   - Rollenänderungen werden nach erneutem Login wirksam; die App-Sitzung kann
+     bis zu acht Stunden bestehen. Für sofortige Wirkung abmelden und erneut anmelden.
+   - Konten deaktivieren: Benutzerkonto in Keycloak öffnen und *Enabled*
+     ausschalten. Passwort zurücksetzen: *Credentials* → Passwort zurücksetzen;
+     E-Mail-Reset funktioniert nur mit eingerichteter Keycloak-Mail-Konfiguration.
+7. **Deploy erneut auslösen** (Actions → „Re-run failed jobs“) oder
    `docker compose --profile sso up -d`.
 
 Fehlt etwas in der `.env`, bricht der Deploy-Job mit einer Meldung ab, die die

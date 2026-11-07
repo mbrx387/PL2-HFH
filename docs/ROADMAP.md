@@ -55,7 +55,9 @@ Betriebsanleitung (Server-Inbetriebnahme, Keycloak): siehe
 
 ### Vor dem offiziellen Go-Live
 - [ ] TLS-Zertifikat automatisieren (Let's Encrypt / certbot)
-- [ ] Demo-User entfernen, echte Nutzer- und persönliche Admin-Konten anlegen
+- [ ] Demo-User vor Go-Live entfernen, echte persönliche Nutzer- und Admin-Konten anlegen
+  (nicht automatisch erledigt; Keycloak-Rollen `reader`, `editor`, `admin` zuweisen
+  und Konsolenrechte separat freigeben)
 - [ ] Logout-Redirect-URI im Realm-Import korrigieren (aktuell manuell gesetzt)
 - [ ] Impressum und Datenschutzerklärung (ohne Login erreichbar)
 - [ ] Keycloak absichern: Brute-Force-Schutz aktivieren, „Passwort vergessen“
@@ -64,7 +66,8 @@ Betriebsanleitung (Server-Inbetriebnahme, Keycloak): siehe
 
 ### Backend
 - [ ] Login-Prüfung von Middleware auf FastAPI-Dependency umstellen
-- [ ] Rollen/Rechte (aktuell hat jeder eingeloggte Account vollen Zugriff)
+- [x] Rollen/Rechte: `reader` liest; `editor` und `admin` dürfen Verzeichnisdaten ändern.
+  Keycloak-Client-Rollen werden serverseitig geprüft; Konsolenrechte bleiben separat.
 - [ ] Session an Token-Ablauf in Keycloak koppeln
 - [ ] Debug-Endpunkt `/auth/me` nur in der Entwicklung bereitstellen
 - [ ] CSV beim Import validieren (fehlerhafte Zeilen melden statt still übernehmen)

@@ -14,7 +14,7 @@ import logging
 from urllib.parse import urlencode
 
 from authlib.integrations.starlette_client import OAuth
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
@@ -71,6 +71,44 @@ else:
 PUBLIC_PATH_PREFIXES = ("/auth/", "/static/")
 PUBLIC_PATHS = {"/healthz"}
 
+APP_ROLES = frozenset({"reader", "editor", "admin"})
+ROLE_PERMISSIONS = {
+    "read_centers": frozenset({"reader", "editor", "admin"}),
+    "write_centers": frozenset({"editor", "admin"}),
+}
+
+
+def extract_app_roles(userinfo: dict) -> list[str]:
+    """Liest nur bekannte App-Rollen aus den von OIDC bestätigten Claims aus."""
+    claim = userinfo.get("roles")
+    if not isinstance(claim, list):
+        return []
+    return sorted({role for role in claim if isinstance(role, str) and role in APP_ROLES})
+
+
+def has_permission(user: dict | None, permission: str) -> bool:
+    """Prüft, ob die App-Rollen der Person die angefragte Berechtigung abdecken."""
+    if permission not in ROLE_PERMISSIONS or not isinstance(user, dict):
+        return False
+    roles = user.get("roles")
+    if not isinstance(roles, list):
+        return False
+    return bool(set(roles) & ROLE_PERMISSIONS[permission])
+
+
+def require_permission(permission: str):
+    """Erzeugt eine FastAPI-Abhängigkeit, die eine Berechtigung serverseitig erzwingt."""
+    async def check_permission(request: Request) -> dict:
+        """Liest die Sitzung und verweigert Anfragen ohne passende Rolle."""
+        if not settings.auth_enabled:
+            return {}
+        user = request.session.get("user")
+        if not has_permission(user, permission):
+            raise HTTPException(status_code=403, detail="Insufficient permissions")
+        return user
+
+    return check_permission
+
 
 class LoginRequiredMiddleware(BaseHTTPMiddleware):
     """Erzwingt einen gueltigen Keycloak-Login fuer alle uebrigen Routen.
@@ -81,6 +119,7 @@ class LoginRequiredMiddleware(BaseHTTPMiddleware):
     """
 
     async def dispatch(self, request: Request, call_next):
+        """Leitet nicht angemeldete Anfragen auf die Keycloak-Anmeldung um."""
         if not settings.auth_enabled:
             return await call_next(request)
 
@@ -97,6 +136,7 @@ class LoginRequiredMiddleware(BaseHTTPMiddleware):
 
 @router.get("/login")
 async def login(request: Request, next: str = "/"):
+    """Startet den Keycloak-Login und speichert ein internes Rücksprungziel."""
     # Offener Redirect vermeiden: nur pfadrelative Ziele innerhalb der
     # eigenen App zulassen, keine absoluten/fremden URLs aus dem Query-Param.
     safe_next = next if next.startswith("/") and not next.startswith("//") else "/"
@@ -108,6 +148,7 @@ async def login(request: Request, next: str = "/"):
 
 @router.get("/callback", name="auth_callback")
 async def callback(request: Request):
+    """Übernimmt die bestätigte Identität und Rollen nach dem OIDC-Login."""
     token = await oauth.keycloak.authorize_access_token(request)
     userinfo = token.get("userinfo") or await oauth.keycloak.userinfo(token=token)
 
@@ -115,6 +156,7 @@ async def callback(request: Request):
         "sub": userinfo.get("sub"),
         "email": userinfo.get("email"),
         "name": userinfo.get("name") or userinfo.get("preferred_username"),
+        "roles": extract_app_roles(userinfo),
     }
     # id_token wird fuer den vollstaendigen Logout (End-Session bei Keycloak,
     # nicht nur lokal) gebraucht.
@@ -126,6 +168,7 @@ async def callback(request: Request):
 
 @router.get("/logout")
 async def logout(request: Request):
+    """Löscht die App-Sitzung und meldet die Person bei Keycloak ab."""
     id_token = request.session.pop("id_token", None)
     request.session.clear()
 

@@ -19,6 +19,28 @@
         "${APP_PUBLIC_URL}/auth/callback"
       ],
       "webOrigins": ["${APP_PUBLIC_URL}"],
+      "roles": [
+        {"name": "reader"},
+        {"name": "editor"},
+        {"name": "admin"}
+      ],
+      "protocolMappers": [
+        {
+          "name": "application-roles",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-client-role-mapper",
+          "consentRequired": false,
+          "config": {
+            "usermodel.clientRoleMapping.clientId": "pflege-finder",
+            "multivalued": "true",
+            "claim.name": "roles",
+            "jsonType.label": "String",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        }
+      ],
       "attributes": {
         "post.logout.redirect.uris": "${APP_PUBLIC_URL}/"
       }
@@ -32,6 +54,9 @@
       "emailVerified": true,
       "firstName": "Demo",
       "lastName": "Nutzer",
+      "clientRoles": {
+        "pflege-finder": ["reader"]
+      },
       "credentials": [
         {
           "type": "password",
