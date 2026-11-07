@@ -256,7 +256,8 @@
       <li>Du meldest dich bei Keycloak an. Keycloak schickt dich mit einem Einmal-Code zurück
         zur App (<code>/auth/callback</code>).</li>
       <li>Die App tauscht diesen Code <em>direkt</em> (Server zu Server, im internen Netz)
-        gegen deine Benutzerinfos ein und merkt sich „eingeloggt“ im Cookie.</li>
+        gegen deine Benutzerinfos und die von Keycloak bestätigten App-Rollen ein und merkt
+        sich beides im signierten Cookie.</li>
       <li>Jetzt bekommst du die Seite. Das JavaScript im Browser lädt die Liste über
         <code>/api/centers?…</code> nach, du filterst, wählst aus, klickst auf „E-Mail senden“
         → <code>mailto:</code> öffnet dein Mailprogramm.</li>
@@ -269,6 +270,24 @@
       Container-Netz (<code>http://keycloak:8080/…</code>) – schneller und ohne Umweg über
       nginx. Beides zeigt auf dasselbe Keycloak, nur über unterschiedliche „Türen“.
     </div>
+    <h3>Rollen und Rechte</h3>
+    <ul>
+      <li><strong>reader:</strong> darf das Verzeichnis und die Bundesländer lesen.</li>
+      <li><strong>editor:</strong> darf zusätzlich Stellen anlegen, vollständig ändern und
+        deaktivieren. Deaktivierte Stellen verschwinden aus der Liste, bleiben aber in der
+        Datenbank erhalten.</li>
+      <li><strong>admin:</strong> hat derzeit dieselben Rechte in der App wie <code>editor</code>.
+        Nutzerverwaltung findet nicht in der App statt.</li>
+    </ul>
+    <p>Die App prüft die Rolle auf dem Server für jeden API-Aufruf. Das Ausblenden von
+      Bedienelementen allein wäre kein Schutz. Die App-Rolle <code>admin</code> ist außerdem
+      keine Keycloak-Konsolenberechtigung. Wer Keycloak-Konten verwalten soll, braucht eine
+      separat und gezielt vergebene Berechtigung im Realm. Änderungen an Rollen greifen nach
+      erneutem Login; eine App-Sitzung kann bis zu acht Stunden bestehen.</p>
+    <p>Neue Stellen werden über <code>POST /api/centers</code> mit einer positiven, eindeutigen
+      ID angelegt. <code>PUT /api/centers/{id}</code> ersetzt die Angaben vollständig und kann
+      eine deaktivierte Stelle wieder aktivieren. <code>DELETE /api/centers/{id}</code>
+      deaktiviert sie, statt den Datenbankeintrag endgültig zu löschen.</p>
   </section>
 
   <!-- ============================================================ -->

@@ -1,3 +1,14 @@
+import pytest
+from fastapi.testclient import TestClient
+
+OIDC_ENV = {
+    "AUTH_ENABLED": "true",
+    "OIDC_ISSUER": "http://kc.test/idp/realms/hfh-pflege",
+    "OIDC_CLIENT_ID": "pflege-finder",
+    "OIDC_CLIENT_SECRET": "s3cret-but-not-a-placeholder",
+}
+
+
 def test_healthz(client):
     assert client.get("/healthz").json() == {"status": "ok"}
 
@@ -49,3 +60,93 @@ def test_limit_capped(client):
 
 def test_bundeslaender(client):
     assert client.get("/api/bundeslaender").json() == ["BY", "SN"]
+
+
+def _center_payload(center_id=None):
+    payload = {
+        "name": "Neue Beratungsstelle",
+        "bundesland": "sn",
+        "plz": "01069",
+        "ort": "Dresden",
+        "adresse": "Neue Straße 1",
+        "email": "neu@example.org",
+        "telefon": "0351 123456",
+        "website": "https://example.org",
+        "latitude": 51.0,
+        "longitude": 13.7,
+        "services": ["Pflegeberatung"],
+    }
+    if center_id is not None:
+        payload["id"] = center_id
+    return payload
+
+
+def test_create_center(client):
+    response = client.post("/api/centers", json=_center_payload(40))
+
+    assert response.status_code == 201
+    assert response.json()["id"] == 40
+    assert response.json()["bundesland"] == "SN"
+    assert response.json()["leistungen"] == "Pflegeberatung"
+
+
+def test_create_center_rejects_unknown_service(client):
+    payload = _center_payload(40)
+    payload["services"] = ["Unknown"]
+
+    assert client.post("/api/centers", json=payload).status_code == 422
+
+
+def test_create_center_conflicting_id_returns_conflict(client):
+    assert client.post("/api/centers", json=_center_payload(10)).status_code == 409
+
+
+def test_update_center_replaces_data_and_services(client):
+    response = client.put("/api/centers/10", json=_center_payload())
+
+    assert response.status_code == 200
+    assert response.json()["name"] == "Neue Beratungsstelle"
+    assert response.json()["leistungen"] == "Pflegeberatung"
+
+
+def test_update_center_returns_not_found(client):
+    assert client.put("/api/centers/999", json=_center_payload()).status_code == 404
+
+
+def test_delete_center(client):
+    response = client.delete("/api/centers/30")
+
+    assert response.status_code == 204
+    assert client.get("/api/centers").json()["total"] == 2
+    assert client.get("/api/bundeslaender").json() == ["SN"]
+    assert client.put("/api/centers/30", json=_center_payload()).status_code == 200
+    assert client.get("/api/centers").json()["total"] == 3
+
+
+def test_write_endpoints_validate_payload(client):
+    payload = _center_payload(40)
+    payload["plz"] = "123"
+
+    assert client.post("/api/centers", json=payload).status_code == 422
+
+
+@pytest.mark.parametrize(
+    ("role", "write_status"),
+    [("reader", 403), ("editor", 201), ("admin", 201)],
+)
+def test_api_enforces_roles_after_oidc_login(make_app, monkeypatch, role, write_status):
+    app = make_app(**OIDC_ENV)
+    from app.auth import oauth
+
+    async def authorize_access_token(request):
+        return {
+            "userinfo": {"sub": "test-user", "email": "test@example.org", "roles": [role]},
+            "id_token": "test-id-token",
+        }
+
+    monkeypatch.setattr(oauth.keycloak, "authorize_access_token", authorize_access_token)
+
+    with TestClient(app) as role_client:
+        assert role_client.get("/auth/callback", follow_redirects=False).status_code == 307
+        assert role_client.get("/api/centers").status_code == 200
+        assert role_client.post("/api/centers", json=_center_payload(40)).status_code == write_status
