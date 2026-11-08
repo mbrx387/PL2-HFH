@@ -4,7 +4,7 @@
 # Imports im Code ("from app.config import ...") ohne Sonderfälle passen.
 
 # Multi-Stage-Build: hält das finale Image klein und ohne Build-Tools.
-FROM python:3.12-slim AS builder
+FROM python:3.14-slim AS builder
 
 WORKDIR /build
 RUN python -m venv /opt/venv
@@ -14,7 +14,7 @@ COPY app/requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
-FROM python:3.12-slim AS runtime
+FROM python:3.14-slim AS runtime
 
 # Non-root User: Container läuft nicht als root (Härtung, siehe README).
 RUN groupadd --system app && useradd --system --gid app --create-home app
