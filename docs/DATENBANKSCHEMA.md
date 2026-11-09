@@ -20,7 +20,8 @@ Das PostgreSQL-Docker-Image führt SQL-Dateien aus
 `/docker-entrypoint-initdb.d` automatisch nur aus, wenn das Datenbank-Volume
 zum ersten Mal mit einer leeren Datenbank initialisiert wird. Beim Start prüft die App die Verbindung und erwartet alle drei Tabellen.
 Sie legt das Schema aber nicht selbst an und importiert keine CSV-Datei
-automatisch.
+automatisch. Einzige Ausnahme ist die AP5-Tabelle `mail_history` (siehe
+unten): Fehlt sie, legt die App nur diese eine Tabelle beim Start an.
 
 ## Tabellen
 
@@ -83,6 +84,30 @@ Der Primärschlüssel `(center_id, service_id)` unterstützt insbesondere
 Abfragen nach `center_id`. Der zusätzliche Index
 `idx_center_services_service_id` unterstützt Abfragen nach `service_id`, etwa
 die Suche nach allen Pflegestellen, die eine bestimmte Leistung anbieten.
+
+### `mail_history` (AP5)
+
+Eine Zeile entspricht einer BCC-E-Mail, die die App an das lokale
+Mailprogramm übergeben hat. Ob die Mail dort abgeschickt wurde, ist bei
+`mailto:` nicht feststellbar; `status` ist deshalb immer `handoff_attempted`.
+Angelegt durch [`db/init/002_create_mail_history.sql`](../db/init/002_create_mail_history.sql)
+(neue Volumes) bzw. beim App-Start (bestehende Datenbanken). Details:
+[AP5_EMAIL_HISTORY.md](AP5_EMAIL_HISTORY.md).
+
+| Spalte | Typ | Bedeutung und Regeln |
+|---|---|---|
+| `id` | Identity-`integer` | Primärschlüssel |
+| `handoff_id` | `varchar(32)` | Eindeutige ID der Übergabe; verhindert Doppeleinträge |
+| `campaign_id` | `varchar(32)` | Gemeinsame ID aller BCC-Gruppen einer Auswahl |
+| `batch_number`, `batch_count` | `integer` | Gruppe *n* von *m* (`1 ≤ n ≤ m`) |
+| `created_at` | `timestamptz` | Zeitpunkt der Übergabe |
+| `created_by` | `varchar(255)` | Angemeldete Person (E-Mail aus Keycloak); leer ohne Login |
+| `subject` | `varchar(255)` | Betreff |
+| `body` | `text` | Nachrichtentext |
+| `recipients` | `json` | Liste der BCC-Adressen |
+| `recipient_count` | `integer` | Anzahl der Adressen, 1 bis 20 |
+| `bundeslaender` | `json` | Ländercodes der Empfänger (Dimension Region) |
+| `status` | `varchar(32)` | Immer `handoff_attempted` (per CHECK abgesichert) |
 
 ## Datenbank starten und prüfen
 

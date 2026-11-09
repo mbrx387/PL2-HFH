@@ -23,7 +23,7 @@ Projekts; Datenmodell/Fachlogik werden im Team weiter ausgebaut (siehe
 | Framework | **FastAPI (Python)** | Klein, schnell erlernbar, automatische OpenAPI-Doku unter `/api/docs`, native Typvalidierung (Pydantic), asynchron-fähig, sehr verbreitet – gute Basis für ein Hochschulprojekt mit wechselnden Mitwirkenden. |
 | Datenhaltung | **PostgreSQL über SQLAlchemy**, Tabellen `centers`, `services` und `center_services`; initialisiert aus dem ETL-CSV-Import | Persistente Daten und eine gemeinsame Datenquelle für App und Importjob. PostgreSQL bleibt nur im internen Compose-Netzwerk erreichbar. |
 | Frontend | **Server-gerenderte Jinja2-Seite + Vanilla JS**, kein SPA-Framework | Kein Build-Schritt, kein Node-Toolchain-Overhead im Container, niedrige Einstiegshürde fürs Team, für den beschriebenen Funktionsumfang (Liste + Checkboxen + Filter) ausreichend. |
-| Mailversand | **`mailto:`-Link im Browser** statt serverseitigem SMTP-Versand | Erfüllt die Vorgabe „über die eigene Standardmailbox versenden“ exakt, UND: der Server verarbeitet dadurch keine SMTP-Zugangsdaten, protokolliert keine E-Mail-Inhalte und hat keinen Angriffsvektor „Mailrelay-Missbrauch“. Sicherheits- und Datenschutzvorteil in einem. |
+| Mailversand | **`mailto:`-Link im Browser** statt serverseitigem SMTP-Versand | Erfüllt die Vorgabe „über die eigene Standardmailbox versenden“ exakt, UND: der Server verarbeitet dadurch keine SMTP-Zugangsdaten und hat keinen Angriffsvektor „Mailrelay-Missbrauch“. Sicherheits- und Datenschutzvorteil in einem. Seit AP5 ermittelt der Server die Adressen, teilt sie in BCC-Gruppen (max. 20) und dokumentiert jede Übergabe an das Mailprogramm in `mail_history` ([Details](docs/AP5_EMAIL_HISTORY.md)). |
 | Containerisierung | **Docker Compose** (nicht Swarm/Kubernetes) | Ein Ubuntu-Server, überschaubare Last, kleines Team. Docker Compose deckt „App + Reverse Proxy (+ optional SSO)“ vollständig ab, ohne die Betriebskomplexität eines Cluster-Orchestrators. Migration zu Swarm/K8s bleibt möglich, ist aber aktuell nicht gerechtfertigt (siehe Abschnitt 4). |
 | Netzwerk-Exposition | **Nginx als TLS-Reverse-Proxy**, App-Container nur intern erreichbar | HTTPS-Terminierung, Security-Header, Rate-Limiting an einer zentralen Stelle statt in der Anwendung; die FastAPI-App selbst ist vom Host/Internet aus nicht direkt erreichbar. |
 | Login/SSO | **Aktiv**: OpenID Connect gegen **Keycloak** (`docker-compose`-Profil `sso`), erzwungen über eine App-Middleware | Kein selbstgebautes Login (Passwort-Handling, Brute-Force-Schutz etc. sind fehleranfällig) – ein etablierter Open-Source-IdP übernimmt das. Details/Betrieb siehe [Abschnitt 5](#5-sicherheitskonzept) und [Roadmap](docs/ROADMAP.md). |
@@ -44,6 +44,10 @@ PL2-HFH/
 │   ├── auth.py                   # OIDC-Login (Keycloak), Login-Pflicht-Middleware
 │   ├── gunicorn_worker.py        # Proxy-Header-fähiger Uvicorn-Worker (siehe auth.py)
 │   ├── routers/centers.py        # GET /api/centers, /api/bundeslaender
+│   ├── routers/mail.py           # AP5: /api/mail/prepare, /api/mail/handoff, /api/mail-history
+│   ├── mail_service.py           # AP5: Adressen aus der DB, BCC-Aufteilung, mailto:-Link
+│   ├── mail_models.py            # AP5: Tabelle mail_history (+ sicheres Anlegen beim Start)
+│   ├── mail_schemas.py           # AP5: Pydantic-Schemas der Mail-API
 │   ├── data/pflegestellen.csv    # versionierter Ausgangs-/Demo-Datensatz
 │   ├── templates/index.html      # Server-gerenderte Startseite
 │   ├── static/css/style.css
@@ -147,8 +151,12 @@ nachträglich aufgesetzt:
   in der Anwendung selbst gesetzt (`app/security.py`) – unabhängig vom
   Auth-Konzept sinnvoll.
 - **Kein serverseitiger Mailversand**: Der `mailto:`-Ansatz bedeutet, es
-  gibt keine SMTP-Zugangsdaten im System, keine serverseitige Mail-Historie
-  und keinen Vektor für Mailrelay-Missbrauch/Spam über die Anwendung.
+  gibt keine SMTP-Zugangsdaten im System und keinen Vektor für
+  Mailrelay-Missbrauch/Spam über die Anwendung. Seit AP5 speichert die
+  Tabelle `mail_history` Betreff, Text, BCC-Adressen und die angemeldete
+  Person jeder Übergabe an das Mailprogramm. Lesen dürfen sie derzeit alle
+  angemeldeten Nutzer:innen (noch keine Rollen); Aufbewahrungsfrist und
+  Berechtigungen sind im Team festzulegen (siehe docs/AP5_EMAIL_HISTORY.md).
 - **Least Privilege im Container**: Der App-Container läuft als
   Non-Root-User, das Dateisystem ist `read_only` (nur `/tmp` beschreibar via
   `tmpfs`), Ressourcenlimits (CPU/RAM) sind gesetzt.
@@ -179,9 +187,12 @@ nachträglich aufgesetzt:
 ## 6. Bekannte Einschränkungen (aktueller Stand)
 
 - `mailto:`-Links haben in der Praxis ein Längenlimit (abhängig vom
-  Mailprogramm, z.B. Outlook ~1.800–2.000 Zeichen). Bei sehr großer Auswahl
-  kann das an Grenzen stoßen – Warnhinweis/Split ist als nächster Schritt
-  vorgesehen.
+  Mailprogramm, z.B. Outlook ~1.800–2.000 Zeichen). Seit AP5 teilt der
+  Server große Auswahlen in BCC-Gruppen mit höchstens 20 Adressen und
+  höchstens 1.800 Zeichen Linklänge (`MAIL_MAX_MAILTO_LENGTH`); jede Gruppe
+  wird per eigenem Klick geöffnet. Ob die Mail im Mailprogramm tatsächlich
+  abgeschickt wurde, kann die Anwendung nicht feststellen – die Historie
+  dokumentiert nur die Übergabe.
 - Der Login-Zustand liegt nur im signierten Session-Cookie, es gibt keinen
   serverseitigen Session-Store. Ein einzelner Login lässt sich damit nicht
   vorzeitig serverseitig widerrufen (nur über Keycloak selbst, „Sessions
