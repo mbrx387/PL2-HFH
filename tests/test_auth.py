@@ -104,10 +104,51 @@ def test_keycloak_realm_maps_client_roles_to_oidc_claim():
     realm = json.loads(realm_path.read_text(encoding="utf-8"))
     client = next(item for item in realm["clients"] if item["clientId"] == "pflege-finder")
     mapper = next(item for item in client["protocolMappers"] if item["name"] == "application-roles")
-    demo = next(user for user in realm["users"] if user["username"] == "demo")
 
     assert {role["name"] for role in client["roles"]} == {"reader", "editor", "admin"}
     assert mapper["config"]["claim.name"] == "roles"
     assert mapper["config"]["id.token.claim"] == "true"
     assert mapper["config"]["userinfo.token.claim"] == "true"
-    assert demo["clientRoles"]["pflege-finder"] == ["reader"]
+    # Gruppen tragen die Rollen; Personen werden nur noch Gruppen zugeordnet.
+    groups = {group["name"]: group["clientRoles"]["pflege-finder"] for group in realm["groups"]}
+    assert groups == {"Lesend": ["reader"], "Redaktion": ["editor"], "Admins": ["admin"]}
+
+
+def _load_realm() -> dict:
+    realm_path = Path(__file__).parents[1] / "keycloak" / "realm-export.json"
+    return json.loads(realm_path.read_text(encoding="utf-8"))
+
+
+def test_keycloak_realm_is_hardened():
+    realm = _load_realm()
+    client = next(item for item in realm["clients"] if item["clientId"] == "pflege-finder")
+
+    # Kein vorbelegtes Konto mit bekanntem Passwort im Import.
+    assert not realm.get("users")
+    assert realm["registrationAllowed"] is False
+    assert realm["bruteForceProtected"] is True
+    assert realm["failureFactor"] <= 5
+    assert "length(12)" in realm["passwordPolicy"]
+    # Ohne E-Mail-Versand fuehrt der Reset-Link ins Leere.
+    assert realm["resetPasswordAllowed"] is False
+    assert realm["rememberMe"] is False
+    assert realm["eventsEnabled"] is True
+    assert realm["adminEventsEnabled"] is True
+    # Keycloak-Sitzung nie laenger als das 8-h-Cookie der App.
+    assert realm["ssoSessionMaxLifespan"] <= 60 * 60 * 8
+    # "all" wuerde den internen Token-Tausch (http://keycloak:8080) blockieren.
+    assert realm["sslRequired"] == "external"
+
+    assert client["publicClient"] is False
+    assert client["directAccessGrantsEnabled"] is False
+    assert client["fullScopeAllowed"] is False
+    assert client["attributes"]["pkce.code.challenge.method"] == "S256"
+    assert all("*" not in uri for uri in client["redirectUris"])
+
+
+def test_app_sends_pkce_challenge(make_app):
+    with TestClient(make_app(**OIDC_ENV)) as client:
+        res = client.get("/auth/login", follow_redirects=False)
+    assert res.status_code == 302
+    assert "code_challenge_method=S256" in res.headers["location"]
+    assert "code_challenge=" in res.headers["location"]

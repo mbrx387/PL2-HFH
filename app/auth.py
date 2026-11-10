@@ -57,7 +57,10 @@ if settings.oidc_configured:
         userinfo_endpoint=f"{internal_base}/protocol/openid-connect/userinfo",
         jwks_uri=f"{internal_base}/protocol/openid-connect/certs",
         issuer=settings.oidc_issuer,
-        client_kwargs={"scope": "openid email profile"},
+        # PKCE (S256): pro Login ein Einmal-Geheimnis, das einen abgefangenen
+        # Autorisierungscode wertlos macht. Keycloak erzwingt es fuer diesen
+        # Client (keycloak/realm-export.json, pkce.code.challenge.method).
+        client_kwargs={"scope": "openid email profile", "code_challenge_method": "S256"},
     )
 else:
     logger.warning(
