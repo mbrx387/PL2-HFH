@@ -4,7 +4,54 @@
   "displayName": "HFH Pflegezentren-Finder",
   "sslRequired": "external",
   "registrationAllowed": false,
-  "resetPasswordAllowed": true,
+  "resetPasswordAllowed": false,
+  "rememberMe": false,
+  "bruteForceProtected": true,
+  "permanentLockout": false,
+  "failureFactor": 5,
+  "waitIncrementSeconds": 60,
+  "maxFailureWaitSeconds": 900,
+  "maxDeltaTimeSeconds": 43200,
+  "passwordPolicy": "length(12) and notUsername and notEmail and passwordHistory(3)",
+  "internationalizationEnabled": true,
+  "supportedLocales": [
+    "de",
+    "en"
+  ],
+  "defaultLocale": "de",
+  "ssoSessionIdleTimeout": 1800,
+  "ssoSessionMaxLifespan": 28800,
+  "accessTokenLifespan": 300,
+  "eventsEnabled": true,
+  "eventsExpiration": 2592000,
+  "adminEventsEnabled": true,
+  "adminEventsDetailsEnabled": false,
+  "groups": [
+    {
+      "name": "Lesend",
+      "clientRoles": {
+        "pflege-finder": [
+          "reader"
+        ]
+      }
+    },
+    {
+      "name": "Redaktion",
+      "clientRoles": {
+        "pflege-finder": [
+          "editor"
+        ]
+      }
+    },
+    {
+      "name": "Admins",
+      "clientRoles": {
+        "pflege-finder": [
+          "admin"
+        ]
+      }
+    }
+  ],
   "clients": [
     {
       "clientId": "pflege-finder",
@@ -18,27 +65,42 @@
       "redirectUris": [
         "${APP_PUBLIC_URL}/auth/callback"
       ],
-      "webOrigins": ["${APP_PUBLIC_URL}"],
-      "attributes": {
-        "post.logout.redirect.uris": "${APP_PUBLIC_URL}/"
-      }
-    }
-  ],
-  "users": [
-    {
-      "username": "demo",
-      "enabled": true,
-      "email": "demo@example.org",
-      "emailVerified": true,
-      "firstName": "Demo",
-      "lastName": "Nutzer",
-      "credentials": [
+      "webOrigins": [
+        "${APP_PUBLIC_URL}"
+      ],
+      "roles": [
         {
-          "type": "password",
-          "value": "demo1234",
-          "temporary": true
+          "name": "reader"
+        },
+        {
+          "name": "editor"
+        },
+        {
+          "name": "admin"
         }
-      ]
+      ],
+      "protocolMappers": [
+        {
+          "name": "application-roles",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-client-role-mapper",
+          "consentRequired": false,
+          "config": {
+            "usermodel.clientRoleMapping.clientId": "pflege-finder",
+            "multivalued": "true",
+            "claim.name": "roles",
+            "jsonType.label": "String",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        }
+      ],
+      "attributes": {
+        "post.logout.redirect.uris": "${APP_PUBLIC_URL}/",
+        "pkce.code.challenge.method": "S256"
+      },
+      "fullScopeAllowed": false
     }
   ]
 }

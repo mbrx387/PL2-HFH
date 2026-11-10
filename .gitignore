@@ -15,3 +15,6 @@ venv/
 nginx/certs/*.pem
 nginx/certs/*.key
 nginx/certs/*.crt
+
+# Persoenliche Editor-Einstellungen
+.vscode/

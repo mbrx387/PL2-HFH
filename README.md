@@ -50,7 +50,8 @@ PL2-HFH/
 │   ├── static/js/app.js          # Liste laden, filtern, mailto-Link bauen
 │   ├── Dockerfile
 │   └── requirements.txt
-├── keycloak/realm-export.json    # Realm/Client/Demo-User, automatischer Import (URLs aus APP_PUBLIC_URL)
+├── keycloak/realm-export.json    # Realm/Client/Rollen/Sicherheit, Import nur beim ersten Start
+├── keycloak/configure.sh         # dieselben Einstellungen für einen bestehenden Realm (kcadm.sh)
 ├── nginx/
 │   ├── nginx.conf
 │   └── conf.d/default.conf       # TLS-Terminierung, Reverse Proxy, Rate-Limit, /idp/-Route (Keycloak)
@@ -223,7 +224,8 @@ docker compose cp app/data/pflegestellen.csv app-db:/tmp/pflegestellen.csv
 docker compose exec -T app-db psql -v ON_ERROR_STOP=1 -U pl2 -d pflegedb \
   < db/import_centers.sql
 # -> https://localhost (Zertifikatswarnung ist bei selbstsigniertem Zertifikat normal)
-# -> Login-Redirect zu Keycloak; Demo-Zugang: demo / demo1234
+# -> Login-Redirect zu Keycloak. Es gibt kein Demo-Konto: ein Konto in der
+#    Admin-Konsole anlegen und einer Gruppe zuordnen (siehe Abschnitt 8).
 ```
 
 **B) Schnell, ohne Login (nur lokale UI-/Datenexploration):**
@@ -286,8 +288,72 @@ Realm-Import existiert:
      *Valid post logout redirect URIs* `<APP_PUBLIC_URL>/`
    - Credentials: *Client secret* kopieren und in `.env` als
      `OIDC_CLIENT_SECRET` eintragen.
-6. **Deploy erneut auslösen** (Actions → „Re-run failed jobs“) oder
+6. **Benutzer und Rollen einrichten:** Im Realm `hfh-pflege` unter *Users* für jede
+   Person ein eigenes Konto anlegen. Unter *Credentials* ein temporäres Passwort
+   setzen und sicher über einen freigegebenen Kanal übermitteln. Danach unter
+   *Groups* → *Join group* genau einer Gruppe zuordnen: `Lesend` (Rolle
+   `reader`), `Redaktion` (`editor`) oder `Admins` (`admin`). Die Gruppen tragen
+   die Client-Rollen des Clients `pflege-finder`. Keine gemeinsamen Konten
+   verwenden; ein Demo-Konto gibt es nicht mehr. Neue Konten müssen beim ersten
+   Login einen Einmalcode (OTP-App) einrichten.
+   - `reader`: Verzeichnis lesen.
+   - `editor`: lesen, anlegen, ändern und Stellen deaktivieren.
+   - `admin`: dieselben Verzeichnisrechte wie `editor`; eine Nutzerverwaltung in
+     der App gibt es nicht.
+   - Die Client-Rolle `admin` verleiht **keine** Rechte in der Keycloak-Konsole.
+     Personen, die Konten verwalten sollen, benötigen dafür eine separat und
+     gezielt freigegebene Keycloak-Berechtigung im Realm `hfh-pflege`. Den
+     globalen `master`-Admin nicht für den täglichen Betrieb verwenden.
+   - Rollenänderungen werden nach erneutem Login wirksam; die App-Sitzung kann
+     bis zu acht Stunden bestehen. Für sofortige Wirkung abmelden und erneut anmelden.
+   - Konten deaktivieren: Benutzerkonto in Keycloak öffnen und *Enabled*
+     ausschalten. Passwort zurücksetzen: *Credentials* → Passwort zurücksetzen;
+     E-Mail-Reset funktioniert nur mit eingerichteter Keycloak-Mail-Konfiguration.
+7. **Deploy erneut auslösen** (Actions → „Re-run failed jobs“) oder
    `docker compose --profile sso up -d`.
+
+### Keycloak-Einstellungen: Realm-Datei, Skript, manuell
+
+`keycloak/realm-export.json` enthält alle Sicherheits- und Rollen-Einstellungen,
+wird aber **nur beim allerersten Start** (leere Keycloak-Datenbank) importiert.
+Für einen bestehenden Realm setzt `keycloak/configure.sh` dieselben Werte per
+`kcadm.sh`; das Skript kann beliebig oft laufen.
+
+| Situation | Was zu tun ist |
+|---|---|
+| Normales Deployment (Push auf `main`) | Nichts. Die Einstellungen liegen in `keycloak-db`. |
+| Einstellungen in der Realm-Datei geändert | `./keycloak/configure.sh` auf dem Server ausführen (und das Skript mitpflegen). |
+| Neuer Server / leeres Volume | Schritte 1–7 oben, danach einmal `./keycloak/configure.sh`. |
+
+```bash
+cd /opt/pl2-hfh
+./keycloak/configure.sh                 # fragt das Admin-Passwort ab
+./keycloak/configure.sh --delete-demo   # entfernt zusätzlich ein altes Demo-Konto
+./keycloak/configure.sh --enforce-pkce  # erst NACH dem Deploy der App-Version mit PKCE
+```
+
+Was die Realm-Datei und das Skript setzen:
+
+| Einstellung | Wert | Realm-Datei | Skript |
+|---|---|---|---|
+| Schutz gegen Passwort-Raten | Sperre nach 5 Fehlversuchen, +60 s je Versuch, max. 15 min | ja | ja |
+| Passwort-Richtlinie | mind. 12 Zeichen, nicht Benutzername/E-Mail, Historie 3 | ja | ja |
+| „Passwort vergessen“ | aus, bis E-Mail-Versand eingerichtet ist | ja | ja |
+| „Angemeldet bleiben“ | aus | ja | ja |
+| Sprache | Deutsch (Standard), Englisch | ja | ja |
+| Sitzungen | 30 min Leerlauf, max. 8 h, Access-Token 5 min | ja | ja |
+| Audit-Protokoll | Benutzer- und Admin-Events, 30 Tage | ja | ja |
+| Client-Rollen `reader`/`editor`/`admin`, Claim `roles` | wie in `app/auth.py` erwartet | ja | ja |
+| Gruppen `Lesend`/`Redaktion`/`Admins` | tragen je eine Rolle | ja | ja |
+| „Full scope allowed“ | aus (nur eigene Rollen im Token) | ja | ja |
+| PKCE (S256) | erzwungen | ja | nur mit `--enforce-pkce` |
+| Einmalcode (OTP) für neue Konten | Pflicht beim ersten Login | nein | ja |
+| Login-Schutz im Realm `master` | wie oben | nein | ja |
+
+Immer manuell (stehen bewusst nicht im Repository): Secrets in der `.env`,
+Client-Secret aus der Konsole übernehmen (Schritt 5), `frontendUrl` des
+`master`-Realms (Schritt 4), persönliche Admin-Konten, echte Benutzer und ihre
+Gruppen, TLS-Zertifikat, Backups.
 
 Fehlt etwas in der `.env`, bricht der Deploy-Job mit einer Meldung ab, die die
 fehlenden Variablen benennt.
