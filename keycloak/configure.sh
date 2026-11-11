@@ -62,6 +62,7 @@ kc update "realms/$REALM" \
   -s internationalizationEnabled=true \
   -s 'supportedLocales=["de","en"]' \
   -s defaultLocale=de \
+  -s loginTheme=hfh \
   -s ssoSessionIdleTimeout=1800 \
   -s ssoSessionMaxLifespan=28800 \
   -s accessTokenLifespan=300

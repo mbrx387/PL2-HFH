@@ -96,7 +96,8 @@ services:
     image: quay.io/keycloak/keycloak:26.8.2-0
     # KC_COMMAND: "start" (Produktion, Default) oder "start-dev" (lokal).
     # --import-realm liest beim ERSTEN Start keycloak/realm-export.json ein
-    # (Realm + Client + Demo-User); existiert der Realm schon, wird uebersprungen.
+    # (Realm, Client, Rollen, Gruppen, Sicherheit); existiert der Realm schon,
+    # wird uebersprungen -> dann keycloak/configure.sh verwenden.
     command: ${KC_COMMAND:-start} --import-realm
     profiles: ["sso"]
     restart: unless-stopped
@@ -126,8 +127,28 @@ services:
       # Wird per ${...}-Platzhalter in keycloak/realm-export.json eingesetzt
       # (Redirect-/Logout-URIs des Clients).
       APP_PUBLIC_URL: ${APP_PUBLIC_URL:?set-in-.env}
+      # Health-Endpunkte auf dem internen Management-Port 9000 (nicht nach
+      # aussen veroeffentlicht), genutzt vom healthcheck unten.
+      KC_HEALTH_ENABLED: "true"
     volumes:
       - ./keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json:ro
+      # Eigenes Login-Theme "hfh" (keycloak/themes/hfh). Aktivieren im Realm:
+      # Realm settings -> Themes -> Login theme: hfh. Keycloak cached Themes
+      # im Produktivmodus: nach Aenderungen am Theme Keycloak neu starten.
+      - ./keycloak/themes/hfh:/opt/keycloak/themes/hfh:ro
+    healthcheck:
+      # Das Keycloak-Image enthaelt weder curl noch wget; daher eine rohe
+      # HTTP-Anfrage ueber Bash /dev/tcp an den Management-Port.
+      test:
+        - "CMD-SHELL"
+        - >-
+          exec 3<>/dev/tcp/127.0.0.1/9000 &&
+          printf 'GET /idp/health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 &&
+          head -n1 <&3 | grep -q ' 200'
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 90s
     ports:
       # Nur an localhost gebunden: Admin-Konsole waehrend der Einrichtung per
       # SSH-Tunnel erreichbar (`ssh -L 8080:localhost:8080 user@server`),

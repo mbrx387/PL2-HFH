@@ -2,6 +2,7 @@
   "realm": "hfh-pflege",
   "enabled": true,
   "displayName": "HFH Pflegezentren-Finder",
+  "loginTheme": "hfh",
   "sslRequired": "external",
   "registrationAllowed": false,
   "resetPasswordAllowed": false,
