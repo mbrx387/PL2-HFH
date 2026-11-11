@@ -1,0 +1,128 @@
+/*
+ * Login-Theme "hfh": Farben und Formen aus frontend/style.css
+ * (PflegeKompass-Entwurf). Aufbau und Logik bleiben die des
+ * Keycloak-Standard-Themes keycloak.v2 (PatternFly 5).
+ */
+:root {
+    --hfh-navy: #172c3b;
+    --hfh-navy-light: #2a4555;
+    --hfh-accent: #8bb9a5;
+    --hfh-accent-dark: #28644f;
+    --hfh-accent-darker: #1e503e;
+    --hfh-text: #243342;
+    --hfh-muted: #6b7b88;
+    --hfh-line: #dce3e8;
+    --hfh-page: #f3f5f7;
+    --hfh-focus: #d49b36;
+    --hfh-radius: 14px;
+
+    /* Variablen aus keycloak.v2 umlenken */
+    --keycloak-card-top-color: var(--hfh-accent);
+    --pf-v5-global--FontFamily--text: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --pf-v5-global--FontFamily--heading: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --pf-v5-global--primary-color--100: var(--hfh-accent-dark);
+    --pf-v5-global--primary-color--200: var(--hfh-accent-darker);
+    --pf-v5-global--link--Color: var(--hfh-accent-dark);
+    --pf-v5-global--link--Color--hover: var(--hfh-accent-darker);
+}
+
+/* Hintergrund: dunkles Navy wie die Seitenleiste im Entwurf, mit
+   dezentem Akzent-Schimmer statt des Keycloak-Polygonmusters. */
+.login-pf body {
+    background:
+        radial-gradient(1200px 600px at 85% -10%, rgba(139, 185, 165, 0.22), transparent 60%),
+        radial-gradient(900px 500px at -10% 110%, rgba(42, 69, 85, 0.9), transparent 60%),
+        var(--hfh-navy);
+    background-attachment: fixed;
+    color: var(--hfh-text);
+}
+
+.pf-v5-c-login__container {
+    grid-template-columns: minmax(0, 30rem);
+}
+
+/* Kopf: Marken-Badge "P" + Realm-Name, ohne Grossbuchstaben-Sperrsatz */
+#kc-header-wrapper {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.85rem;
+    font-size: 1.6rem;
+    font-weight: 700;
+    letter-spacing: 0;
+    text-transform: none;
+    color: #ffffff !important;
+}
+
+#kc-header-wrapper::before {
+    content: "P";
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    width: 2.6rem;
+    height: 2.6rem;
+    border-radius: 10px;
+    background: var(--hfh-accent);
+    color: var(--hfh-navy);
+    font-size: 1.35rem;
+    font-weight: 800;
+}
+
+/* Karte: weiss, runde Ecken, Akzentlinie oben */
+.pf-v5-c-login__main {
+    border-radius: var(--hfh-radius);
+    overflow: hidden;
+    box-shadow: 0 20px 45px rgba(10, 22, 31, 0.35);
+}
+
+.pf-v5-c-login__main-header {
+    border-top: 5px solid var(--hfh-accent);
+}
+
+#kc-page-title {
+    color: var(--hfh-text);
+    font-weight: 700;
+}
+
+.pf-v5-c-form__label-text {
+    color: var(--hfh-text);
+    font-weight: 600;
+}
+
+/* Eingabefelder wie im Entwurf: 44 px hoch, 8 px Radius */
+.pf-v5-c-form-control {
+    --pf-v5-c-form-control--BorderRadius: 8px;
+    --pf-v5-c-form-control--after--BorderBottomColor: var(--hfh-line);
+    --pf-v5-c-form-control--hover--after--BorderBottomColor: var(--hfh-accent-dark);
+    --pf-v5-c-form-control--focus--after--BorderBottomColor: var(--hfh-accent-dark);
+    min-height: 44px;
+    border-radius: 8px;
+}
+
+/* Haupt-Button: Akzentgruen */
+.pf-v5-c-button.pf-m-primary {
+    --pf-v5-c-button--m-primary--BackgroundColor: var(--hfh-accent-dark);
+    --pf-v5-c-button--m-primary--hover--BackgroundColor: var(--hfh-accent-darker);
+    --pf-v5-c-button--m-primary--focus--BackgroundColor: var(--hfh-accent-darker);
+    --pf-v5-c-button--m-primary--active--BackgroundColor: var(--hfh-accent-darker);
+    border-radius: 8px;
+    min-height: 44px;
+    font-weight: 600;
+}
+
+/* Gut sichtbarer Tastatur-Fokus (wie im Entwurf) */
+.login-pf :focus-visible {
+    outline: 3px solid var(--hfh-focus);
+    outline-offset: 3px;
+}
+
+.pf-v5-c-login__main-footer-band {
+    color: var(--hfh-muted);
+}
+
+@media (max-width: 600px) {
+    #kc-header-wrapper {
+        font-size: 1.3rem;
+    }
+}
