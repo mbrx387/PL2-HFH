@@ -9,7 +9,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy import inspect
 from starlette.middleware.sessions import SessionMiddleware
 
-from app.auth import LoginRequiredMiddleware
+from app.auth import LoginRequiredMiddleware, has_permission
 from app.auth import router as auth_router
 from app.config import get_settings
 from app.database import engine
@@ -116,9 +116,24 @@ def healthz():
     return {"status": "ok"}
 
 
+ROLE_LABELS = {"admin": "Administration", "editor": "Redaktion", "reader": "Lesezugriff"}
+
+
 @app.get("/")
 def index(request: Request):
     user = request.session.get("user") if settings.auth_enabled else None
+    # Nur fuer die Anzeige (Menuepunkt "Datenpflege" ein-/ausblenden); die
+    # eigentliche Pruefung passiert serverseitig in require_permission().
+    can_edit = has_permission(user, "write_centers") if settings.auth_enabled else True
+    roles = (user or {}).get("roles") or []
+    role_label = next((ROLE_LABELS[r] for r in ("admin", "editor", "reader") if r in roles), "")
     return templates.TemplateResponse(
-        request, "index.html", {"app_name": settings.app_name, "user": user}
+        request,
+        "index.html",
+        {
+            "app_name": settings.app_name,
+            "user": user,
+            "can_edit": can_edit,
+            "role_label": role_label if settings.auth_enabled else "Entwicklung",
+        },
     )
