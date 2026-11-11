@@ -45,9 +45,9 @@ PL2-HFH/
 │   ├── gunicorn_worker.py        # Proxy-Header-fähiger Uvicorn-Worker (siehe auth.py)
 │   ├── routers/centers.py        # GET /api/centers, /api/bundeslaender
 │   ├── data/pflegestellen.csv    # versionierter Ausgangs-/Demo-Datensatz
-│   ├── templates/index.html      # Server-gerenderte Startseite
-│   ├── static/css/style.css
-│   ├── static/js/app.js          # Liste laden, filtern, mailto-Link bauen
+│   ├── templates/index.html      # Oberfläche (Übersicht, Einrichtungen, Datenpflege, E-Mail, Historie)
+│   ├── static/css/style.css      # Design aus dem früheren Entwurf frontend/
+│   ├── static/js/main.js         # Ansichten, Suche, Auswahl, Datenpflege, mailto-Pakete
 │   ├── Dockerfile
 │   └── requirements.txt
 ├── keycloak/realm-export.json    # Realm/Client/Rollen/Sicherheit, Import nur beim ersten Start

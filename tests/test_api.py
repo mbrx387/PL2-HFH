@@ -18,6 +18,36 @@ def test_index_renders(client):
     assert res.status_code == 200
     assert "Content-Security-Policy" in res.headers
     assert "unsafe-inline" not in res.headers["Content-Security-Policy"]
+    # Neue Oberflaeche (aus frontend/ integriert) mit eigenem Skript.
+    assert 'src="/static/js/main.js"' in res.text
+    assert 'id="view-einrichtungen"' in res.text
+
+
+def test_static_assets_are_served(client):
+    assert client.get("/static/js/main.js").status_code == 200
+    assert client.get("/static/css/style.css").status_code == 200
+
+
+@pytest.mark.parametrize(("role", "shows_editor"), [("reader", False), ("editor", True), ("admin", True)])
+def test_index_shows_data_maintenance_only_for_editors(make_app, monkeypatch, role, shows_editor):
+    app = make_app(**OIDC_ENV)
+    from app.auth import oauth
+
+    async def authorize_access_token(request):
+        return {
+            "userinfo": {"sub": "u", "email": "u@example.org", "name": "Test Person", "roles": [role]},
+            "id_token": "t",
+        }
+
+    monkeypatch.setattr(oauth.keycloak, "authorize_access_token", authorize_access_token)
+
+    with TestClient(app) as role_client:
+        role_client.get("/auth/callback", follow_redirects=False)
+        page = role_client.get("/").text
+
+    assert ('id="view-datenpflege"' in page) is shows_editor
+    assert (f'data-can-edit="{"true" if shows_editor else "false"}"') in page
+    assert "Test Person" in page
 
 
 def test_list_centers_uses_csv_ids(client):

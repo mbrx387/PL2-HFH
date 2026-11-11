@@ -1,69 +1,482 @@
 <!DOCTYPE html>
 <html lang="de">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>{{ app_name }}</title>
-  <link rel="stylesheet" href="/static/css/style.css" />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ app_name }} | Einrichtungsverwaltung</title>
+    <meta name="description" content="Verwaltung, Suche und Kommunikation mit Pflege- und Beratungsstellen.">
+    <link rel="stylesheet" href="/static/css/style.css">
+    <script src="/static/js/main.js" defer></script>
 </head>
-<body>
-  <header class="topbar">
-    <div class="topbar-row">
-      <div>
-        <h1>{{ app_name }}</h1>
-        <p class="subtitle">Pflege- und Beratungsstellen in Deutschland finden und per E-Mail kontaktieren</p>
-      </div>
-      {% if user %}
-      <div class="user-info">
-        <span>Angemeldet als {{ user.name or user.email or user.sub }}</span>
-        <a href="/auth/logout">Abmelden</a>
-      </div>
-      {% endif %}
+
+<body data-can-edit="{{ 'true' if can_edit else 'false' }}">
+    <div class="workspace">
+
+        <!-- Linke Navigation -->
+        <aside class="sidebar">
+            <div class="brand">
+                <div class="brand-icon" aria-hidden="true">P</div>
+                <div>
+                    <span class="brand-name">{{ app_name }}</span>
+                    <span class="brand-subtitle">HFH · Verwaltungsportal</span>
+                </div>
+            </div>
+
+            <p class="nav-heading">ARBEITSBEREICH</p>
+
+            <nav class="sidebar-nav" aria-label="Hauptnavigation">
+                <a href="#dashboard" class="nav-link" data-view="dashboard">
+                    <span class="nav-icon" aria-hidden="true">⌂</span>
+                    Übersicht
+                </a>
+                <a href="#einrichtungen" class="nav-link" data-view="einrichtungen">
+                    <span class="nav-icon" aria-hidden="true">▤</span>
+                    Einrichtungen
+                </a>
+                {% if can_edit %}
+                <a href="#datenpflege" class="nav-link" data-view="datenpflege">
+                    <span class="nav-icon" aria-hidden="true">＋</span>
+                    Datenpflege
+                </a>
+                {% endif %}
+                <a href="#email" class="nav-link" data-view="email">
+                    <span class="nav-icon" aria-hidden="true">✉</span>
+                    E-Mail-Zentrale
+                </a>
+                <a href="#historie" class="nav-link" data-view="historie">
+                    <span class="nav-icon" aria-hidden="true">◷</span>
+                    Versandhistorie
+                </a>
+            </nav>
+
+            <div class="sidebar-footer">
+                <div class="status-indicator" aria-hidden="true"></div>
+                <div>
+                    {% if user %}
+                    <span class="sidebar-user">{{ user.name or user.email or user.sub }}</span>
+                    <a href="/auth/logout" class="sidebar-logout">Abmelden</a>
+                    {% else %}
+                    <span class="sidebar-user">Ohne Anmeldung (Entwicklung)</span>
+                    {% endif %}
+                </div>
+            </div>
+        </aside>
+
+        <!-- Hauptbereich -->
+        <main class="workspace-main">
+
+            <header class="workspace-header">
+                <div>
+                    <p class="breadcrumb">
+                        Pflegezentren-Finder / <span id="breadcrumb-current">Einrichtungen</span>
+                    </p>
+                    <h1 id="page-title">Einrichtungen</h1>
+                    <p class="page-description" id="page-description">
+                        Pflegeeinrichtungen finden, filtern und verwalten.
+                    </p>
+                </div>
+
+                <div class="header-actions">
+                    {% if role_label %}<span class="user-role">{{ role_label }}</span>{% endif %}
+                    <div class="user-avatar" aria-hidden="true">
+                        {{ ((user.name or user.email or "U") if user else "U")[:1] | upper }}
+                    </div>
+                </div>
+            </header>
+
+            <!-- ANSICHT: EINRICHTUNGEN -->
+            <section class="page-view" id="view-einrichtungen" hidden>
+
+                <div class="section-heading">
+                    <div>
+                        <h2>Einrichtungsverzeichnis</h2>
+                        <p>Durchsuche das Verzeichnis nach passenden Anlaufstellen.</p>
+                    </div>
+                    {% if can_edit %}
+                    <button type="button" class="action-button" id="new-center">
+                        + Einrichtung hinzufügen
+                    </button>
+                    {% endif %}
+                </div>
+
+                <section class="filter-panel" aria-labelledby="search-heading">
+                    <h2 id="search-heading">Wonach suchen Sie?</h2>
+
+                    <form id="search-form">
+                        <div class="filter-grid">
+                            <div class="form-field search-field">
+                                <label for="search-input">Suchbegriff</label>
+                                <div class="input-with-icon">
+                                    <span aria-hidden="true">⌕</span>
+                                    <input type="search" id="search-input" name="search"
+                                           placeholder="Name, Ort oder Postleitzahl ...">
+                                </div>
+                            </div>
+
+                            <div class="form-field">
+                                <label for="offer-filter">Angebot</label>
+                                <select id="offer-filter" name="angebot">
+                                    <option value="">Alle Angebote</option>
+                                    <option value="pflegestuetzpunkt">Pflegestützpunkt</option>
+                                    <option value="pflegeberatung">Pflegeberatung</option>
+                                    <option value="wohnberatung">Wohnberatung</option>
+                                    <option value="demenzberatung">Demenzberatung</option>
+                                    <option value="angehoerigenberatung">Angehörigenberatung</option>
+                                    <option value="betreuungsberatung">Betreuungsberatung</option>
+                                </select>
+                            </div>
+
+                            <div class="form-field">
+                                <label for="region-filter">Bundesland</label>
+                                <select id="region-filter" name="bundesland">
+                                    <option value="">Alle Bundesländer</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="filter-actions">
+                            <button type="submit" class="action-button">Einrichtungen suchen</button>
+                            <button type="reset" class="secondary-button" id="reset-search">
+                                Filter zurücksetzen
+                            </button>
+                        </div>
+                    </form>
+                </section>
+
+                <section class="directory-panel" aria-labelledby="results-heading">
+                    <div class="results-header">
+                        <div>
+                            <h2 id="results-heading">Suchergebnisse</h2>
+                            <p id="results-count" aria-live="polite">Einrichtungen werden geladen ...</p>
+                        </div>
+                        <button type="button" class="secondary-button" id="select-visible">
+                            Alle auf dieser Seite auswählen
+                        </button>
+                    </div>
+
+                    <div class="bulk-actions" id="bulk-actions" hidden>
+                        <span><strong id="selected-count">0</strong> Einrichtungen ausgewählt</span>
+                        <button type="button" class="action-button" data-open-view="email">
+                            E-Mail vorbereiten
+                        </button>
+                        <button type="button" class="text-button" id="clear-selection">
+                            Auswahl aufheben
+                        </button>
+                    </div>
+
+                    <div id="directory-results" class="directory-results">
+                        <div class="loading-state">
+                            <span class="loading-indicator" aria-hidden="true"></span>
+                            <p>Einrichtungsdaten werden geladen ...</p>
+                        </div>
+                    </div>
+
+                    <div class="pagination">
+                        <span id="pagination-info">Seite 1</span>
+                        <div class="pagination-actions">
+                            <button type="button" class="secondary-button" id="previous-page" disabled>Zurück</button>
+                            <button type="button" class="secondary-button" id="next-page" disabled>Weiter</button>
+                        </div>
+                    </div>
+                </section>
+            </section>
+
+            {% if can_edit %}
+            <!-- ANSICHT: DATENPFLEGE (nur Rollen editor/admin) -->
+            <section class="page-view" id="view-datenpflege" hidden>
+
+                <div class="section-heading">
+                    <div>
+                        <h2 id="center-form-title">Einrichtung anlegen</h2>
+                        <p>Neue Einrichtungen anlegen oder bestehende Datensätze bearbeiten.</p>
+                    </div>
+                </div>
+
+                <section class="form-panel">
+                    <form id="center-form" novalidate>
+                        <input type="hidden" id="center-edit-id">
+
+                        <div class="form-section-heading">
+                            <h3>Allgemeine Informationen</h3>
+                            <p>Angaben zur Einrichtung</p>
+                        </div>
+
+                        <div class="editor-grid">
+                            <div class="form-field" id="center-id-field">
+                                <label for="center-id">Kennnummer (ID) *</label>
+                                <input id="center-id" name="id" type="number" min="1000000" step="1"
+                                       inputmode="numeric" placeholder="ab 1000000">
+                                <p class="field-help">
+                                    Manuell angelegte Einrichtungen bekommen eine ID ab 1.000.000,
+                                    damit sie nicht mit dem automatischen Datenimport kollidieren.
+                                </p>
+                            </div>
+
+                            <div class="form-field">
+                                <label for="center-name">Name der Einrichtung *</label>
+                                <input id="center-name" name="name" required maxlength="200"
+                                       placeholder="Name der Einrichtung">
+                            </div>
+
+                            <div class="form-field">
+                                <label for="center-email">E-Mail-Adresse</label>
+                                <input id="center-email" name="email" type="email" maxlength="254"
+                                       placeholder="kontakt@beispiel.de">
+                            </div>
+
+                            <div class="form-field">
+                                <label for="center-phone">Telefonnummer</label>
+                                <input id="center-phone" name="telefon" type="tel" maxlength="100">
+                            </div>
+
+                            <div class="form-field">
+                                <label for="center-website">Internetseite</label>
+                                <input id="center-website" name="website" type="url" maxlength="500"
+                                       placeholder="https://...">
+                            </div>
+                        </div>
+
+                        <div class="form-section-heading">
+                            <h3>Standort</h3>
+                            <p>Geografische Angaben</p>
+                        </div>
+
+                        <div class="editor-grid">
+                            <div class="form-field">
+                                <label for="center-street">Straße und Hausnummer</label>
+                                <input id="center-street" name="adresse" maxlength="200">
+                            </div>
+
+                            <div class="form-field">
+                                <label for="center-postcode">Postleitzahl *</label>
+                                <input id="center-postcode" name="plz" required inputmode="numeric"
+                                       pattern="[0-9]{5}" maxlength="5" placeholder="01067">
+                            </div>
+
+                            <div class="form-field">
+                                <label for="center-city">Stadt / Gemeinde *</label>
+                                <input id="center-city" name="ort" required maxlength="200">
+                            </div>
+
+                            <div class="form-field">
+                                <label for="center-state">Bundesland *</label>
+                                <select id="center-state" name="bundesland" required>
+                                    <option value="">Bitte auswählen</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <fieldset class="form-field full-width offer-fieldset">
+                            <legend>Beratungsleistungen und Angebote</legend>
+                            <div class="offer-grid" id="center-offers"></div>
+                        </fieldset>
+
+                        <p class="form-note">* Pflichtfelder.</p>
+
+                        <div class="notice" id="etl-notice">
+                            <strong>Hinweis zum automatischen Datenimport</strong>
+                            <p>
+                                Einrichtungen aus dem wöchentlichen Import (ID unter 1.000.000) werden
+                                dabei mit den Daten der Quelle aktualisiert. Manuelle Änderungen an
+                                diesen Datensätzen können dadurch überschrieben werden.
+                            </p>
+                        </div>
+
+                        <div class="form-actions">
+                            <button type="button" class="danger-button" id="deactivate-center" hidden>
+                                Einrichtung deaktivieren
+                            </button>
+                            <button type="button" class="secondary-button" data-open-view="einrichtungen">
+                                Abbrechen
+                            </button>
+                            <button type="submit" class="action-button" id="save-center">
+                                Einrichtung speichern
+                            </button>
+                        </div>
+
+                        <p id="center-form-message" class="form-message" role="status" aria-live="polite"></p>
+                    </form>
+                </section>
+            </section>
+            {% endif %}
+
+            <!-- ANSICHT: E-MAIL-ZENTRALE -->
+            <section class="page-view" id="view-email" hidden>
+
+                <div class="section-heading">
+                    <div>
+                        <h2>E-Mail-Zentrale</h2>
+                        <p>Nachrichten an ausgewählte Pflegeeinrichtungen vorbereiten.</p>
+                    </div>
+                </div>
+
+                <section class="form-panel">
+                    <form id="email-form">
+                        <div class="form-section-heading">
+                            <h3>Empfänger</h3>
+                            <p>Auswahl aus dem Einrichtungsverzeichnis</p>
+                        </div>
+
+                        <div class="recipient-summary">
+                            <div>
+                                <span class="summary-label">Ausgewählte Einrichtungen</span>
+                                <strong id="email-recipient-count">0</strong>
+                            </div>
+                            <button type="button" class="secondary-button" data-open-view="einrichtungen">
+                                Einrichtungen auswählen
+                            </button>
+                        </div>
+
+                        <div class="form-field">
+                            <label for="email-recipients">Empfängeradressen</label>
+                            <textarea id="email-recipients" rows="4" readonly
+                                      placeholder="Wähle zuerst Einrichtungen aus dem Verzeichnis aus."></textarea>
+                            <p class="field-help">
+                                Die Adressen werden aus den ausgewählten Einrichtungen übernommen.
+                            </p>
+                        </div>
+
+                        <div class="form-section-heading">
+                            <h3>Nachricht verfassen</h3>
+                        </div>
+
+                        <div class="form-field">
+                            <label for="email-subject">Betreff *</label>
+                            <input id="email-subject" name="subject" required maxlength="250"
+                                   placeholder="Betreff der Nachricht">
+                        </div>
+
+                        <div class="form-field">
+                            <label for="email-body">Nachricht</label>
+                            <textarea id="email-body" name="body" rows="9"
+                                      placeholder="Gib hier den Nachrichtentext ein ..."></textarea>
+                        </div>
+
+                        <div class="notice">
+                            <strong>So funktioniert der Versand</strong>
+                            <p>
+                                Die Nachricht wird in deinem eigenen Mailprogramm geöffnet; der Server
+                                verschickt nichts. Alle Empfänger stehen im BCC-Feld und sehen sich
+                                nicht gegenseitig. Bei mehr als 20 Empfängern wird die Nachricht in
+                                mehrere Teile aufgeteilt, damit Mailprogramme sie zuverlässig öffnen.
+                            </p>
+                        </div>
+
+                        <div class="form-actions">
+                            <button type="button" class="secondary-button" id="clear-email">
+                                Nachricht leeren
+                            </button>
+                            <button type="submit" class="action-button" id="send-email">
+                                E-Mail vorbereiten
+                            </button>
+                        </div>
+
+                        <div id="email-batches" class="email-batches" hidden></div>
+
+                        <p id="email-form-message" class="form-message" role="status" aria-live="polite"></p>
+                    </form>
+                </section>
+            </section>
+
+            <!-- ANSICHT: VERSANDHISTORIE -->
+            <section class="page-view" id="view-historie" hidden>
+
+                <div class="section-heading">
+                    <div>
+                        <h2>Versandhistorie</h2>
+                        <p>Frühere Nachrichten und dokumentierte Versandvorgänge nachvollziehen.</p>
+                    </div>
+                </div>
+
+                <section class="directory-panel">
+                    <div class="notice">
+                        <strong>Noch nicht verfügbar</strong>
+                        <p>
+                            Die Versandhistorie wird mit dem E-Mail-Modul (Issue #20, PR #47)
+                            angebunden. Bis dahin werden Versandvorgänge nicht gespeichert.
+                        </p>
+                    </div>
+
+                    <div class="table-wrapper">
+                        <table class="history-table">
+                            <thead>
+                                <tr>
+                                    <th scope="col">Zeitpunkt</th>
+                                    <th scope="col">Betreff</th>
+                                    <th scope="col">Empfänger</th>
+                                    <th scope="col">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td colspan="4" class="empty-cell">Keine Einträge.</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+            </section>
+
+            <!-- ANSICHT: ÜBERSICHT -->
+            <section class="page-view" id="view-dashboard" hidden>
+
+                <div class="section-heading">
+                    <div>
+                        <h2>Projektübersicht</h2>
+                        <p>Zentrale Anlaufstelle für die Einrichtungsverwaltung und Kommunikation.</p>
+                    </div>
+                </div>
+
+                <div class="overview-grid">
+                    <article class="overview-card">
+                        <span class="overview-icon" aria-hidden="true">▤</span>
+                        <p>Einrichtungen</p>
+                        <strong id="dashboard-center-count">–</strong>
+                        <span class="overview-description">Aktive Datensätze im Verzeichnis</span>
+                    </article>
+
+                    <article class="overview-card">
+                        <span class="overview-icon" aria-hidden="true">✉</span>
+                        <p>Ausgewählte Empfänger</p>
+                        <strong id="dashboard-recipient-count">0</strong>
+                        <span class="overview-description">Aktuelle Auswahl</span>
+                    </article>
+
+                    <article class="overview-card">
+                        <span class="overview-icon" aria-hidden="true">◷</span>
+                        <p>Versandhistorie</p>
+                        <strong>–</strong>
+                        <span class="overview-description">Folgt mit dem E-Mail-Modul</span>
+                    </article>
+                </div>
+
+                <section class="directory-panel">
+                    <h2>Schnellzugriff</h2>
+                    <p>Wähle einen Arbeitsbereich, um mit den jeweiligen Aufgaben fortzufahren.</p>
+
+                    <div class="quick-links">
+                        <button type="button" class="quick-link" data-open-view="einrichtungen">
+                            <span>Einrichtungsverzeichnis öffnen</span><span aria-hidden="true">→</span>
+                        </button>
+                        {% if can_edit %}
+                        <button type="button" class="quick-link" id="quick-new-center">
+                            <span>Einrichtung neu anlegen</span><span aria-hidden="true">→</span>
+                        </button>
+                        {% endif %}
+                        <button type="button" class="quick-link" data-open-view="email">
+                            <span>E-Mail-Nachricht vorbereiten</span><span aria-hidden="true">→</span>
+                        </button>
+                        <button type="button" class="quick-link" data-open-view="historie">
+                            <span>Versandhistorie anzeigen</span><span aria-hidden="true">→</span>
+                        </button>
+                    </div>
+                </section>
+            </section>
+
+            <footer class="workspace-footer">
+                <span>Pflegezentren-Finder · HFH · ProjektLab 2</span>
+            </footer>
+        </main>
     </div>
-  </header>
-
-  <main class="container">
-    <section class="filters" aria-label="Filter">
-      <input
-        type="search"
-        id="search"
-        placeholder="Suche nach Name, Ort oder PLZ …"
-        aria-label="Suche"
-      />
-      <select id="bundesland-filter" aria-label="Bundesland filtern">
-        <option value="">Alle Bundesländer</option>
-      </select>
-      <select id="angebot-filter" aria-label="Angebot filtern">
-        <option value="">Alle Angebote</option>
-        <option value="pflegestuetzpunkt">Pflegestützpunkt</option>
-        <option value="pflegeberatung">Pflegeberatung</option>
-        <option value="wohnberatung">Wohnberatung</option>
-        <option value="demenzberatung">Demenzberatung</option>
-        <option value="angehoerigenberatung">Angehörigenberatung</option>
-        <option value="betreuungsberatung">Betreuungsberatung</option>
-      </select>
-    </section>
-
-    <section class="list-meta">
-      <span id="result-count">Lade Daten …</span>
-      <div class="list-actions">
-        <button id="select-all" type="button">Alle sichtbaren auswählen</button>
-        <button id="select-none" type="button">Auswahl leeren</button>
-      </div>
-    </section>
-
-    <section aria-label="Ergebnisliste">
-      <ul id="center-list" class="center-list"></ul>
-    </section>
-  </main>
-
-  <footer class="mail-bar">
-    <span><strong id="selected-count">0</strong> ausgewählt</span>
-    <button id="send-mail" type="button" disabled>
-      E-Mail an Auswahl senden (öffnet Ihr Mailprogramm)
-    </button>
-  </footer>
-
-  <script src="/static/js/app.js"></script>
 </body>
 </html>
