@@ -54,7 +54,7 @@ Betriebsanleitung (Server-Inbetriebnahme, Keycloak): siehe
 ## 🔜 Als Nächstes
 
 ### Vor dem offiziellen Go-Live
-- [ ] TLS-Zertifikat automatisieren (Let's Encrypt / certbot): Repo-Seite fertig (Webroot-Route, Deploy-Hook, Ablauf-Check); auf dem Server certbot auf Webroot umstellen und Hook installieren (`nginx/README.md`, Abschnitt certbot)
+- [x] TLS-Zertifikat automatisieren (Let's Encrypt / certbot): seit 15.11.2026 webroot ohne nginx-Pause, Deploy-Hook kopiert und lädt nginx neu, täglicher Ablauf-Check (`nginx/README.md`, Abschnitt 7)
 - [ ] Echte persönliche Nutzer- und Admin-Konten anlegen und einer Gruppe
   (`Lesend`, `Redaktion`, `Admins`) zuordnen; Konsolenrechte separat freigeben.
   Der Demo-User ist aus dem Realm-Import entfernt; auf dem Server einmalig

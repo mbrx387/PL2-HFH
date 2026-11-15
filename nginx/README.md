@@ -253,150 +253,113 @@ ob ein Zertifikat in weniger als 30 Tagen abläuft, und erneuert nur dann.
 Diese Prüfmethode heißt **Webroot** (HTTP-01). Ihr Vorteil: nginx läuft
 während der Prüfung einfach weiter.
 
-### Wie es bei uns aufgesetzt ist (Stand 15.11.2026)
+### Wie es bei uns aufgesetzt ist
 
 certbot **2.9.0** läuft direkt auf dem Ubuntu-Server (apt, nicht als
 Container). Der systemd-Timer `certbot.timer` startet `certbot renew`
-zweimal täglich.
+zweimal täglich. Seit dem 15.11.2026 mit der Methode **webroot**: nginx läuft
+während der Verlängerung weiter.
 
 | Was | Wert |
 |---|---|
-| Zertifikat für nginx | `projekthfh.tech`: `projekthfh.tech` + `www.projekthfh.tech`, ECDSA, gültig bis 06.01.2027 |
-| Zweites Zertifikat | `projekthfh.tech-0001`: nur `projekthfh.tech` (ohne `www.`), gültig bis 15.01.2027. Wird von nginx **nicht** benutzt (siehe unten) |
+| Zertifikat (`--cert-name`) | `projekthfh.tech`, für `projekthfh.tech` + `www.projekthfh.tech`, ECDSA |
+| Methode | `authenticator = webroot`, Webroot `/opt/pl2-hfh/nginx/acme-challenge` |
 | Einstellungen | `/etc/letsencrypt/renewal/projekthfh.tech.conf` |
 | Original-Dateien | `/etc/letsencrypt/live/projekthfh.tech/` (Verknüpfungen auf `archive/`) |
 | Kopie, die nginx liest | `/opt/pl2-hfh/nginx/certs/fullchain.pem` und `privkey.pem` |
-| Automatik | `certbot.timer` |
-
-**Bisherige Methode: `standalone` mit nginx-Pause**
-
-```
-certbot renew (Zertifikat fällig)
-  ├─ pre-Hook   stop-nginx.sh        nginx-Container stoppen  ─┐
-  ├─ certbot startet eigenen Mini-Webserver auf Port 80        │ Seite für
-  ├─ Let's Encrypt prüft, neues Zertifikat                      │ alle weg
-  ├─ deploy-Hooks copy-certs.sh, copy-to-pl2-hfh.sh (kopieren)  │
-  └─ post-Hook  start-nginx.sh       nginx wieder starten     ─┘
-```
-
-Das funktioniert, hat aber drei Nachteile:
-
-- Bei jeder Verlängerung ist die Seite kurz komplett weg.
-- Scheitert der Post-Hook, bleibt nginx aus.
-- Die Hooks in `renewal-hooks/` gelten für **alle** Zertifikate auf dem
-  Server. Kopiert ein Deploy-Hook „das gerade verlängerte Zertifikat“, kann
-  das Zertifikat `projekthfh.tech-0001` (ohne `www.`) in `nginx/certs/`
-  landen. Danach zeigt `www.projekthfh.tech` eine Zertifikatswarnung.
-
-**Ziel ab diesem Stand: `webroot` ohne Pause**
+| Prüfzettel im Container | `/var/www/certbot` (= `nginx/acme-challenge/`, nur lesbar) |
+| Deploy-Hook | `/etc/letsencrypt/renewal-hooks/deploy/pl2-hfh-nginx.sh` (Kopie von `scripts/certbot-deploy-hook.sh`) |
+| pre-/post-Hooks | keine |
+| Automatik | `certbot.timer`; Warnung bei < 21 Tagen Restlaufzeit durch `.github/workflows/uptime.yml` |
 
 ```
-certbot renew (Zertifikat fällig)
-  ├─ certbot legt Prüfzettel nach /opt/pl2-hfh/nginx/acme-challenge/
-  ├─ nginx liefert ihn aus (läuft einfach weiter)
-  ├─ Let's Encrypt prüft, neues Zertifikat
-  └─ deploy-Hook pl2-hfh-nginx.sh: nur für "projekthfh.tech" kopieren, nginx -t, reload
+certbot.timer (2× täglich)
+  └─ certbot renew: weniger als 30 Tage übrig?
+       ├─ nein → nichts tun
+       └─ ja:
+           ├─ Prüfzettel nach /opt/pl2-hfh/nginx/acme-challenge/.well-known/acme-challenge/
+           ├─ Let's Encrypt holt ihn über http://projekthfh.tech/… und http://www.…  (nginx liefert aus)
+           ├─ neues Zertifikat nach /etc/letsencrypt/live/projekthfh.tech/
+           └─ deploy-Hook pl2-hfh-nginx.sh
+                ├─ nur für "projekthfh.tech" (andere Zertifikate werden ignoriert)
+                ├─ kopiert nach nginx/certs/ (privkey.pem mit Rechten 600)
+                └─ nginx -t  →  nginx -s reload   (ohne Unterbrechung)
 ```
 
 `scripts/certbot-deploy-hook.sh` reagiert nur auf das Zertifikat
-`projekthfh.tech` (änderbar über `CERT_NAME`) und ignoriert alle anderen.
+`projekthfh.tech` (änderbar über die Variable `CERT_NAME`). Hooks in
+`renewal-hooks/` laufen für **jedes** Zertifikat auf dem Server. Ohne diese
+Prüfung könnte ein anderes Zertifikat das richtige überschreiben.
+
+Geprüft am 15.11.2026: Eine erzwungene Verlängerung lief komplett durch. Der
+Hook hat kopiert und nginx neu geladen. Von außen liefern `projekthfh.tech` und
+`www.projekthfh.tech` das neue Zertifikat aus.
 
 > **Warum eine Kopie in `nginx/certs/`?** Die Dateien in `live/` sind nur
 > Verknüpfungen auf `../../archive/…`. Bindet man nur `live/` in den Container
 > ein, zeigen die Verknüpfungen dort ins Leere. Die Kopie hält außerdem den
 > lokalen Aufbau (selbstsigniertes Zertifikat am selben Ort) gleich.
 
-### Umstellung auf webroot (einmalig, nach dem Deploy dieses Standes)
+<details>
+<summary>Verlauf: wie es bis 15.11.2026 aussah</summary>
 
-Alle Befehle auf dem Server als root. Es werden keine Passwörter gebraucht.
-**Reihenfolge einhalten:** `certbot reconfigure` und `--dry-run` führen die
-Pre- und Post-Hooks aus. Steht dann noch `stop-nginx.sh` im Ordner, stoppt er
-nginx, und die Webroot-Prüfung läuft ins Leere.
+- Methode `standalone`: Ein pre-Hook `stop-nginx.sh` stoppte nginx, certbot
+  belegte selbst Port 80, ein post-Hook `start-nginx.sh` startete nginx
+  wieder. Bei jeder Verlängerung war die Seite kurz weg.
+- Zwei deploy-Hooks (`copy-certs.sh`, `copy-to-pl2-hfh.sh`) kopierten ohne
+  Prüfung, welches Zertifikat gerade verlängert wurde.
+- Ein Duplikat `projekthfh.tech-0001` (nur `projekthfh.tech`, ohne `www.`)
+  hätte damit das richtige Zertifikat überschreiben können. Es wurde gelöscht.
+- Die alten Hooks liegen als Sicherung in `/root/certbot-hooks-alt/`. Nach der
+  ersten automatischen Verlängerung (ab etwa Mitte Januar 2027) können sie weg.
 
-> **Schritt 1 ist eine Voraussetzung.** Liefert `curl` dort nicht genau `ok`
-> (sondern z. B. `301 Moved Permanently`), **nicht weitermachen**. Dann ist die
-> neue nginx-Konfiguration nicht aktiv; meist ist eine Override-Datei schuld
-> (Abschnitt 8).
+</details>
+
+### Kurz prüfen, ob alles stimmt
 
 ```bash
-# 1) Prüf-Route testen: nginx muss die Datei über HTTP ausliefern
-mkdir -p /opt/pl2-hfh/nginx/acme-challenge/.well-known/acme-challenge
+certbot certificates                                              # nur "projekthfh.tech"
+grep authenticator /etc/letsencrypt/renewal/projekthfh.tech.conf  # webroot
+systemctl list-timers | grep certbot                              # Timer aktiv
+ls /etc/letsencrypt/renewal-hooks/*/                              # nur deploy/pl2-hfh-nginx.sh
+certbot renew --dry-run                                           # success, Seite bleibt erreichbar
+```
+
+Prüf-Route testen (muss `ok` liefern, sonst ist die nginx-Konfiguration nicht
+aktiv, siehe Abschnitt 8):
+
+```bash
 echo ok > /opt/pl2-hfh/nginx/acme-challenge/.well-known/acme-challenge/ping
-curl http://projekthfh.tech/.well-known/acme-challenge/ping      # erwartet: ok
-curl http://www.projekthfh.tech/.well-known/acme-challenge/ping  # erwartet: ok
+curl http://projekthfh.tech/.well-known/acme-challenge/ping
+curl http://www.projekthfh.tech/.well-known/acme-challenge/ping
 rm /opt/pl2-hfh/nginx/acme-challenge/.well-known/acme-challenge/ping
-
-# 2) Alte Hooks beiseitelegen (nicht löschen, für den Rückweg)
-mkdir -p /root/certbot-hooks-alt
-mv /etc/letsencrypt/renewal-hooks/pre/stop-nginx.sh \
-   /etc/letsencrypt/renewal-hooks/post/start-nginx.sh \
-   /etc/letsencrypt/renewal-hooks/deploy/copy-certs.sh \
-   /etc/letsencrypt/renewal-hooks/deploy/copy-to-pl2-hfh.sh \
-   /root/certbot-hooks-alt/
-
-# 3) Neuen Deploy-Hook installieren
-install -m 755 /opt/pl2-hfh/scripts/certbot-deploy-hook.sh \
-  /etc/letsencrypt/renewal-hooks/deploy/pl2-hfh-nginx.sh
-
-# 4) Auf webroot umstellen (macht selbst einen Probelauf)
-certbot reconfigure --cert-name projekthfh.tech \
-  --webroot --webroot-path /opt/pl2-hfh/nginx/acme-challenge
-
-# 5) Probelauf der ganzen Kette; nginx muss dabei durchgehend erreichbar bleiben
-certbot renew --dry-run
-grep authenticator /etc/letsencrypt/renewal/projekthfh.tech.conf   # erwartet: webroot
 ```
 
-Das Hook-Skript läuft nur nach einer echten Verlängerung, nicht beim
-Probelauf. Wer es sofort testen will, kann eine Verlängerung erzwingen. Das
-zählt gegen die Mengengrenzen von Let's Encrypt, deshalb nur einmal:
+Der Deploy-Hook läuft nur nach einer echten Verlängerung, nicht beim Probelauf.
+Ihn sofort zu testen geht nur per `certbot renew --cert-name projekthfh.tech
+--force-renewal`. Das zählt gegen die Mengengrenzen von Let's Encrypt, deshalb
+sparsam nutzen.
 
-```bash
-certbot renew --cert-name projekthfh.tech --force-renewal
-```
+### Einrichtung auf einem neuen Server
 
-**Rückweg**, falls Schritt 4 oder 5 scheitert:
-
-```bash
-rm /etc/letsencrypt/renewal-hooks/deploy/pl2-hfh-nginx.sh
-mv /root/certbot-hooks-alt/stop-nginx.sh  /etc/letsencrypt/renewal-hooks/pre/
-mv /root/certbot-hooks-alt/start-nginx.sh /etc/letsencrypt/renewal-hooks/post/
-mv /root/certbot-hooks-alt/copy-*.sh      /etc/letsencrypt/renewal-hooks/deploy/
-certbot reconfigure --cert-name projekthfh.tech --standalone
-```
-
-### Das zweite Zertifikat `projekthfh.tech-0001`
-
-Es entsteht, wenn man `certbot certonly -d projekthfh.tech` aufruft, obwohl
-schon ein Zertifikat mit *anderer* Namensliste existiert: certbot legt dann ein
-neues mit Endung `-0001` an, statt das alte zu ändern. nginx liefert das
-Zertifikat mit `www.` aus (geprüft am 11.11.2026, gültig bis 06.01.2027), also
-`projekthfh.tech`.
-
-Nach erfolgreicher Umstellung kann `-0001` entfernt werden. Vorher prüfen,
-dass kein Hook oder Skript darauf verweist:
-
-```bash
-grep -rn "projekthfh.tech-0001" /etc/letsencrypt/renewal-hooks /root/certbot-hooks-alt /opt/pl2-hfh 2>/dev/null
-certbot delete --cert-name projekthfh.tech-0001     # fragt noch einmal nach
-```
-
-Sonst verlängert certbot es weiter, verbraucht Mengengrenzen und läuft jedes
-Mal durch alle Hooks.
-
-### Neues Zertifikat beantragen (nur bei Neu-Einrichtung oder Namensänderung)
-
-Immer mit `--cert-name`, damit kein `-0001`-Duplikat entsteht:
-
-```bash
-certbot certonly --webroot -w /opt/pl2-hfh/nginx/acme-challenge \
-  --cert-name projekthfh.tech -d projekthfh.tech -d www.projekthfh.tech
-```
-
-Auf einem ganz neuen Server gibt es noch kein Zertifikat, und nginx startet ohne
-eines nicht. Dann einmalig mit `scripts/generate_dev_cert.sh` ein
-Übergangszertifikat erzeugen, nginx starten und danach den Befehl oben
-ausführen.
+1. Repo nach `/opt/pl2-hfh`, `.env` anlegen (Haupt-README, Abschnitt 8).
+2. Übergangszertifikat, damit nginx überhaupt startet:
+   `./scripts/generate_dev_cert.sh`, dann `docker compose --profile sso up -d`.
+3. certbot installieren (nur **eine** Variante, apt **oder** snap) und den Hook ablegen:
+   ```bash
+   install -m 755 /opt/pl2-hfh/scripts/certbot-deploy-hook.sh \
+     /etc/letsencrypt/renewal-hooks/deploy/pl2-hfh-nginx.sh
+   ```
+4. Prüf-Route testen (siehe oben).
+5. Zertifikat beantragen, **immer mit `--cert-name`**, sonst entsteht bei
+   geänderter Namensliste ein Duplikat wie `-0001`:
+   ```bash
+   certbot certonly --webroot -w /opt/pl2-hfh/nginx/acme-challenge \
+     --cert-name projekthfh.tech -d projekthfh.tech -d www.projekthfh.tech \
+     --deploy-hook /etc/letsencrypt/renewal-hooks/deploy/pl2-hfh-nginx.sh
+   ```
+   Der Hook ersetzt dabei das Übergangszertifikat und lädt nginx neu.
+6. `certbot renew --dry-run`
 
 ### Worauf man bei certbot achten muss
 
@@ -453,9 +416,14 @@ läuft unverändert weiter.
 Docker Compose lädt neben `docker-compose.yml` automatisch eine
 `docker-compose.override.yml`, wenn sie im selben Ordner liegt. Auf dem Server
 ist sie nicht versioniert und bleibt bei jedem Deploy erhalten. Bindet sie
-für nginx einen anderen Ordner als `nginx/conf.d` ein (früher
-`nginx/conf.d.prod`), kommt **keine Änderung an `nginx/conf.d` je live an**.
-Der Deploy läuft trotzdem grün durch.
+für nginx einen anderen Ordner als `nginx/conf.d` ein, kommt **keine Änderung
+an `nginx/conf.d` je live an**. Der Deploy läuft trotzdem grün durch.
+
+So war es bis 15.11.2026: Eine Override-Datei band `nginx/conf.d.prod` ein.
+Ihre einzige eigene Regel, die Sperre für `/idp/realms/master`, steht jetzt in
+`default.conf`. Der nginx-Teil der Override-Datei ist entfernt. Der
+`keycloak`-Teil existiert noch und überschreibt `KC_HOSTNAME` sowie den
+Realm-Import.
 
 - Der Deploy gibt in diesem Fall eine Warnung aus:
   „nginx liest /etc/nginx/conf.d aus … statt aus nginx/conf.d“.
@@ -488,10 +456,11 @@ curl -k https://localhost/healthz      # erwartet: {"status":"ok"}
 | Keine Antwort per IP-Adresse | gewollt | Immer über `https://projekthfh.tech` aufrufen |
 | Zertifikatswarnung im Browser | Zertifikat abgelaufen oder Test-Zertifikat | `sudo certbot certificates`, dann `sudo certbot renew --dry-run` |
 | `uptime.yml` meldet „Zertifikat läuft ab“ | Erneuerung klappt seit über einer Woche nicht | `sudo journalctl -u certbot` bzw. `/var/log/letsencrypt/letsencrypt.log` |
-| certbot: „Timeout during connect“ / 404 bei der Prüfung | Port 80 zu oder Prüf-Route fehlt | Schritt 1 der Einrichtung wiederholen |
+| certbot: „Timeout during connect“ / 404 bei der Prüfung | Port 80 zu oder Prüf-Route fehlt | Prüf-Route testen (Abschnitt 7, „Kurz prüfen“) |
 | certbot: „reader size limit exceeded“ | Prüf-Route nicht aktiv: nginx leitet auf HTTPS und weiter auf die Login-Seite um | Eingebundenen `conf.d`-Ordner prüfen (Abschnitt 8) |
+| certbot: „Could not bind TCP port 80“ | Ein Zertifikat steht noch auf `standalone` | `grep authenticator /etc/letsencrypt/renewal/*.conf`; auf `webroot` umstellen oder Duplikat löschen |
 | Änderung an `nginx/conf.d` wirkt nicht, Deploy grün | Override-Datei bindet anderen Ordner ein | Abschnitt 8, „Keine Override-Dateien“ |
-| `www.` zeigt Zertifikatswarnung, `projekthfh.tech` nicht | In `nginx/certs/` liegt ein Zertifikat ohne `www.` (z. B. `-0001`) | `openssl x509 -in nginx/certs/fullchain.pem -noout -ext subjectAltName`; richtiges Zertifikat erneut kopieren |
+| `www.` zeigt Zertifikatswarnung, `projekthfh.tech` nicht | In `nginx/certs/` liegt ein Zertifikat ohne `www.` | `openssl x509 -in nginx/certs/fullchain.pem -noout -ext subjectAltName`; dann `certbot certificates` auf Duplikate prüfen und das richtige Zertifikat erneut kopieren |
 | Deploy bricht bei `nginx -t` ab | Fehler in `nginx/` | Fehlermeldung im Actions-Log lesen; alte Konfiguration läuft weiter |
 | Deploy bricht ab: „certs fehlt“ | `nginx/certs/*.pem` fehlt auf dem Server | Hook-Skript erneut ausführen lassen (`--force-renewal`) oder Dateien kopieren |
 
