@@ -114,12 +114,13 @@ Was passiert, wenn jemand `https://projekthfh.tech/` aufruft:
 | `/` und alles andere | App (`app:8000`) | Login wird von der App erzwungen |
 | `/static/…` | App | Höheres Burst-Limit; mit `?v=` ein Jahr im Browser-Cache |
 | `/healthz` | App | Kein Eintrag im Zugriffsprotokoll; Deploy und Container prüfen ihn |
-| `/idp/admin/…` | – | Immer 404: Verwaltung ist von außen gesperrt |
-| `/idp/realms/master…` | – | Immer 404: Admin-Realm `master` ist von außen gesperrt (Konsole nur per SSH-Tunnel) |
+| `/idp/admin…` | – | Immer 404: Verwaltung ist von außen gesperrt (unabhängig von Groß-/Kleinschreibung) |
+| `/idp/realms/master…` | – | Immer 404: Admin-Realm `master` ist von außen gesperrt; Konsole nur per SSH-Tunnel |
 | `/idp/…` | Keycloak (`keycloak:8080`) | Höheres Burst-Limit (100), weil die Login-Seite viele Dateien lädt |
 
-nginx nimmt die **längste passende Regel**. `/idp/admin/` ist länger als
-`/idp/` und gewinnt deshalb.
+nginx nimmt normalerweise die **längste passende Regel**. Die Sperre für
+`/idp/admin` und `/idp/realms/master` ist ein regulärer Ausdruck (`~*`). Solche
+Regeln haben Vorrang vor `/idp/` und ignorieren Groß- und Kleinschreibung.
 
 ---
 
