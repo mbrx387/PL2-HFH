@@ -38,6 +38,7 @@ lehnt Großbuchstaben in Benutzernamen ab, deshalb dort `-prod`.
 | Secret `SSH_HOST` | Secret `SSH_HOST_PROD` | GitHub → Environment `PROD` |
 | Secret `SSH_USER` | Secret `SSH_USER_PROD` | GitHub → Environment `PROD` |
 | Secret `SSH_PRIVATE_KEY` | Secret `SSH_PRIVATE_KEY_PROD` | GitHub → Environment `PROD` |
+| – (Port 22) | Secret `SSH_PORT_PROD` (HFH: `2223`) | GitHub → Environment `PROD` |
 | Variable `PUBLIC_HOST` | Variable `PUBLIC_HOST_PROD` | GitHub → Repository-Variablen |
 | Deploy-User `<SSH_USER>` | Deploy-User `<SSH_USER>-prod` | HFH-Server |
 | Secret `ZQP_API_URL` | – (ETL läuft in GitHub) | GitHub |
@@ -140,7 +141,9 @@ ssh-keygen -t ed25519 -C "github-actions-prod" -f ./deploy_prod -N ""
 - [ ] **Environments:** `INT` ohne Regeln. Bei `PROD` unter „Deployment
       branches“ nur `main` zulassen.
 - [ ] **Environment `PROD` → Secrets:** `SSH_HOST_PROD`, `SSH_USER_PROD`,
-      `SSH_PRIVATE_KEY_PROD`.
+      `SSH_PRIVATE_KEY_PROD`, `SSH_PORT_PROD`. Der HFH-Container hat keine eigene
+      öffentliche IPv4: SSH läuft über die gemeinsame IPv4 mit eigenem Port. GitHub-Runner
+      können kein IPv6, die IPv6-Adresse des Containers hilft hier also nicht.
 - [ ] **Bestehendes nicht anfassen:** `SSH_HOST`, `SSH_USER`, `SSH_PRIVATE_KEY`,
       `PUBLIC_HOST`, `ZQP_API_URL`.
 - [ ] **Ruleset für `main`:** PR erforderlich. Required status checks

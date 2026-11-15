@@ -5,6 +5,8 @@ name: Deploy to server
 # Secrets unterscheiden sich:
 #   INT : SSH_HOST,      SSH_USER,      SSH_PRIVATE_KEY,      Variable PUBLIC_HOST
 #   PROD: SSH_HOST_PROD, SSH_USER_PROD, SSH_PRIVATE_KEY_PROD, Variable PUBLIC_HOST_PROD
+# Optional SSH_PORT / SSH_PORT_PROD, wenn sshd nicht auf 22 erreichbar ist
+# (HFH: gemeinsame IPv4 mit Port-Weiterleitung je Gruppe). Standard 22.
 # Der Aufrufer reicht die Secrets per "secrets: inherit" durch; welche gelesen
 # werden, bestimmt inputs.suffix ("" oder "_PROD"). Ablauf: docs/BETRIEB.md.
 
@@ -61,6 +63,7 @@ jobs:
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets[format('SSH_HOST{0}', inputs.suffix)] }}
+          port: ${{ secrets[format('SSH_PORT{0}', inputs.suffix)] || 22 }}
           username: ${{ secrets[format('SSH_USER{0}', inputs.suffix)] }}
           key: ${{ secrets[format('SSH_PRIVATE_KEY{0}', inputs.suffix)] }}
           script: |
@@ -186,6 +189,7 @@ jobs:
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets[format('SSH_HOST{0}', inputs.suffix)] }}
+          port: ${{ secrets[format('SSH_PORT{0}', inputs.suffix)] || 22 }}
           username: ${{ secrets[format('SSH_USER{0}', inputs.suffix)] }}
           key: ${{ secrets[format('SSH_PRIVATE_KEY{0}', inputs.suffix)] }}
           script: |
