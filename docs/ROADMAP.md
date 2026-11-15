@@ -76,6 +76,10 @@ Betriebsanleitung (Server-Inbetriebnahme, Keycloak): siehe
 - [ ] Tests erweitern (Login-Callback, Logout, Datenimport)
 
 ### Betrieb / CI
+- [x] Zwei Stufen: INT (jeder PR) und PROD (Merge nach `main`, erst nach grünem INT),
+  ein gemeinsames Deploy-Skript, Hostname per `PUBLIC_HOST` ([`BETRIEB.md`](BETRIEB.md))
+- [ ] HFH-Server als PROD einrichten und Daten umziehen ([`BETRIEB.md`](BETRIEB.md), Phasen 1–3)
+- [ ] `backup.sh` ins Repo holen (liegt bisher nur auf dem Server), Cron + Kopie außerhalb
 - [ ] Automatischer Rollback bei fehlgeschlagenem Health-Check
 - [ ] GitHub Actions aktualisieren (Node-20-Deprecation) und auf Commit-SHAs pinnen
 - [ ] Strukturiertes Logging und Uptime-Monitoring

@@ -1,0 +1,221 @@
+name: Deploy to server
+
+# Wiederverwendbarer Deploy-Ablauf fuer INT und PROD (aufgerufen von
+# deploy.yml). Beide Server laufen mit genau demselben Skript - nur die
+# Secrets unterscheiden sich:
+#   INT : SSH_HOST,      SSH_USER,      SSH_PRIVATE_KEY,      Variable PUBLIC_HOST
+#   PROD: SSH_HOST_PROD, SSH_USER_PROD, SSH_PRIVATE_KEY_PROD, Variable PUBLIC_HOST_PROD
+# Der Aufrufer reicht die Secrets per "secrets: inherit" durch; welche gelesen
+# werden, bestimmt inputs.suffix ("" oder "_PROD"). Ablauf: docs/BETRIEB.md.
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: GitHub-Environment (INT oder PROD)
+        required: true
+        type: string
+      suffix:
+        description: Endung der Secret-/Variablennamen ("" fuer INT, "_PROD" fuer PROD)
+        required: false
+        type: string
+        default: ""
+      sha:
+        description: Commit, der deployt wird (voller SHA)
+        required: true
+        type: string
+      fetch_ref:
+        description: Ref, der den Commit enthaelt (main oder refs/pull/<n>/head)
+        required: true
+        type: string
+      require_on_main:
+        description: Nur Commits erlauben, die auf main liegen (PROD)
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ inputs.environment }}
+      url: ${{ vars[format('PUBLIC_HOST{0}', inputs.suffix)] && format('https://{0}', vars[format('PUBLIC_HOST{0}', inputs.suffix)]) || '' }}
+    permissions:
+      packages: read
+    steps:
+      - name: Eingaben pruefen
+        env:
+          SHA: ${{ inputs.sha }}
+          FETCH_REF: ${{ inputs.fetch_ref }}
+          SSH_HOST_SET: ${{ secrets[format('SSH_HOST{0}', inputs.suffix)] != '' }}
+        run: |
+          # Werte landen spaeter im SSH-Skript - nur erwartete Formen zulassen.
+          [[ "$SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::Ungueltiger Commit '$SHA' (voller SHA erwartet)"; exit 1; }
+          [[ "$FETCH_REF" =~ ^(main|refs/pull/[0-9]+/head)$ ]] || { echo "::error::Ungueltiger Ref '$FETCH_REF'"; exit 1; }
+          if [ "$SSH_HOST_SET" != "true" ]; then
+            echo "::error::Secret SSH_HOST${{ inputs.suffix }} fehlt (Environment ${{ inputs.environment }}) - siehe docs/BETRIEB.md."
+            exit 1
+          fi
+
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets[format('SSH_HOST{0}', inputs.suffix)] }}
+          username: ${{ secrets[format('SSH_USER{0}', inputs.suffix)] }}
+          key: ${{ secrets[format('SSH_PRIVATE_KEY{0}', inputs.suffix)] }}
+          script: |
+            set -e
+            SHA='${{ inputs.sha }}'
+            echo "Deploy ${{ inputs.environment }}: $SHA (${{ inputs.fetch_ref }})"
+            mkdir -p /opt/pl2-hfh
+            cd /opt/pl2-hfh
+            if [ ! -d .git ]; then
+              # Ordner existiert ggf. schon (z.B. wegen .env) - "clone" in
+              # ein bestehendes, nicht-leeres Verzeichnis scheitert, daher
+              # per init+fetch+checkout statt "git clone" initialisieren.
+              # checkout -f fasst nur GIT-TRACKED Dateien an, .env (ist
+              # .gitignore't) bleibt unberührt.
+              git init -b main
+              git remote add origin https://github.com/${{ github.repository }}.git
+            fi
+            # main immer holen (fuer die PROD-Pruefung), dazu ggf. den PR-Ref.
+            git fetch origin main
+            if [ '${{ inputs.fetch_ref }}' != 'main' ]; then
+              git fetch origin '${{ inputs.fetch_ref }}'
+            fi
+            if ! git cat-file -e "${SHA}^{commit}" 2>/dev/null; then
+              echo "::error::Commit $SHA nicht gefunden (Force-Push auf den PR?) - Deploy abgebrochen."
+              exit 1
+            fi
+            if [ '${{ inputs.require_on_main }}' = 'true' ] && ! git merge-base --is-ancestor "$SHA" origin/main; then
+              echo "::error::$SHA liegt nicht auf main - PROD deployt nur Commits von main."
+              exit 1
+            fi
+            # Zweite Sicherung direkt auf dem Server (falls env-guard
+            # umgangen wurde): enthaelt der Ziel-Commit eine .env, wuerde
+            # "reset --hard" die Server-.env ueberschreiben - VORHER abbrechen.
+            bad="$(git ls-tree -r --name-only "$SHA" \
+              | grep -E '(^|/)(\.env(\..+)?|[^/]+\.env)$' | grep -vE '(^|/)\.env\.example$' || true)"
+            if [ -n "$bad" ]; then
+              echo "::error::$SHA enthaelt Umgebungsdateien - Deploy abgebrochen:"
+              echo "$bad"
+              exit 1
+            fi
+            env_sum_before="$(sha256sum .env 2>/dev/null || true)"
+            # Lokaler Branch "main" zeigt immer auf den deployten Stand
+            # (auf INT also ggf. auf einen PR-Commit).
+            git checkout -f -B main "$SHA"
+            git reset --hard "$SHA"
+            if [ "$(sha256sum .env 2>/dev/null || true)" != "$env_sum_before" ]; then
+              echo "::error::/opt/pl2-hfh/.env wurde beim Checkout veraendert - Deploy abgebrochen."
+              exit 1
+            fi
+            # Pflichtvariablen der Server-.env pruefen, BEVOR docker compose
+            # mit einer kryptischen Meldung abbricht. Platzhalter zaehlen als
+            # fehlend. Zertifikate pruefen, weil nginx ohne sie nicht startet.
+            if [ ! -f .env ]; then
+              echo "::error::/opt/pl2-hfh/.env fehlt - aus .env.example anlegen."
+              exit 1
+            fi
+            missing=""
+            for key in SECRET_KEY APP_PUBLIC_URL ALLOWED_ORIGINS \
+                       OIDC_ISSUER OIDC_CLIENT_ID OIDC_CLIENT_SECRET OIDC_ISSUER_INTERNAL \
+                       KEYCLOAK_ADMIN_PASSWORD KEYCLOAK_DB_PASSWORD APP_DB_PASSWORD KC_HOSTNAME; do
+              value="$(grep -E "^${key}=" .env | tail -n1 | cut -d= -f2-)"
+              case "$value" in
+                ""|change-me|*example.org*) missing="$missing $key" ;;
+              esac
+            done
+            if [ -n "$missing" ]; then
+              echo "::error::In /opt/pl2-hfh/.env fehlen oder sind Platzhalter:$missing"
+              echo "Siehe .env.example und README.md, Abschnitt 8."
+              exit 1
+            fi
+            for cert in nginx/certs/fullchain.pem nginx/certs/privkey.pem; do
+              if [ ! -s "$cert" ]; then
+                echo "::error::$cert fehlt - nginx startet ohne TLS-Zertifikat nicht."
+                exit 1
+              fi
+            done
+            # Hostname fuer nginx (server_name) und den certbot-Hook aus
+            # APP_PUBLIC_URL ableiten: https://projekthfh.tech -> projekthfh.tech.
+            # Eine Quelle statt zwei Werten, die auseinanderlaufen koennen.
+            PUBLIC_HOST="$(grep -E '^APP_PUBLIC_URL=' .env | tail -n1 | cut -d= -f2- \
+              | sed -E 's#^[A-Za-z]+://##; s#[/:].*$##')"
+            if ! printf '%s' "$PUBLIC_HOST" | grep -Eq '^[A-Za-z0-9.-]+$'; then
+              echo "::error::Kein gueltiger Hostname aus APP_PUBLIC_URL ('$PUBLIC_HOST')."
+              exit 1
+            fi
+            # Exakten Build dieses Commits deployen (statt "latest"); der Tag
+            # bleibt in .env stehen, damit spaetere manuelle `compose up`
+            # dieselbe Version nutzen. Rollback = alten Tag eintragen.
+            IMAGE_TAG="sha-$(echo "$SHA" | cut -c1-7)"
+            sed -i '/^IMAGE_TAG=/d; /^PUBLIC_HOST=/d' .env
+            echo "IMAGE_TAG=${IMAGE_TAG}" >> .env
+            echo "PUBLIC_HOST=${PUBLIC_HOST}" >> .env
+            # Compose-Konfiguration validieren (faengt z.B. Syntaxfehler ab).
+            docker compose --profile sso config --quiet
+            # Warnung, wenn eine nicht versionierte Datei (z.B.
+            # docker-compose.override.yml) die nginx-Konfiguration aus dem Repo
+            # ueberdeckt - Aenderungen an nginx/ kaemen sonst nie live an.
+            for pair in "/etc/nginx/conf.d:nginx/conf.d" "/etc/nginx/templates:nginx/templates"; do
+              target="${pair%%:*}"; expected="$PWD/${pair#*:}"
+              src="$(docker compose --profile sso config --format json \
+                | python3 -c 'import json,sys; t=sys.argv[1]; v=json.load(sys.stdin)["services"]["nginx"].get("volumes",[]); print(next((x.get("source","") for x in v if x.get("target")==t),""))' "$target")"
+              if [ "$src" != "$expected" ]; then
+                echo "::warning::nginx liest $target aus '$src' statt aus $expected (Override-Datei?) - siehe nginx/README.md, Abschnitt 8."
+              fi
+            done
+            # Nur nötig, falls das GHCR-Package NICHT public ist:
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+            docker compose --profile sso pull
+            docker compose --profile sso up -d
+            # nginx liest geaenderte Dateien aus nginx/ (Konfiguration,
+            # Zertifikate) nur beim Start oder Reload. "up -d" erstellt den
+            # Container nur neu, wenn sich docker-compose.yml oder .env-Werte
+            # des Dienstes aendern - daher das Template neu rendern (wie beim
+            # Container-Start), pruefen und neu laden. Schlaegt "nginx -t"
+            # fehl, bricht der Deploy ab und die laufende Konfiguration bleibt.
+            docker compose exec -T -e NGINX_ENTRYPOINT_QUIET_LOGS=1 nginx \
+              /docker-entrypoint.d/20-envsubst-on-templates.sh
+            docker compose exec -T nginx nginx -t
+            docker compose exec -T nginx nginx -s reload
+            docker image prune -f
+
+      - name: Health check (Server)
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets[format('SSH_HOST{0}', inputs.suffix)] }}
+          username: ${{ secrets[format('SSH_USER{0}', inputs.suffix)] }}
+          key: ${{ secrets[format('SSH_PRIVATE_KEY{0}', inputs.suffix)] }}
+          script: |
+            for i in $(seq 1 12); do
+              if curl -fsS -k https://localhost/healthz > /dev/null; then
+                echo "Healthy."
+                exit 0
+              fi
+              echo "Not ready yet, retry $i/12..."
+              sleep 5
+            done
+            echo "Health check failed after 60s - dumping status/logs:"
+            cd /opt/pl2-hfh
+            docker compose ps
+            docker compose logs --tail=50
+            exit 1
+
+      # Von aussen: DNS, Firewall, Zertifikat und Hostname zusammen pruefen.
+      # Ohne Variable PUBLIC_HOST bzw. PUBLIC_HOST_PROD nur eine Warnung.
+      - name: Health check (von aussen)
+        env:
+          HOST: ${{ vars[format('PUBLIC_HOST{0}', inputs.suffix)] }}
+        run: |
+          if [ -z "$HOST" ]; then
+            echo "::warning::Variable PUBLIC_HOST${{ inputs.suffix }} nicht gesetzt - externer Check uebersprungen."
+            exit 0
+          fi
+          for i in 1 2 3; do
+            if curl -fsS --max-time 15 "https://${HOST}/healthz"; then echo; exit 0; fi
+            sleep 10
+          done
+          echo "::error::https://${HOST}/healthz von aussen nicht erreichbar."
+          exit 1
