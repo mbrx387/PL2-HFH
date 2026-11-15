@@ -14,9 +14,19 @@
 set -euo pipefail
 
 APP_DIR="${APP_DIR:-/opt/pl2-hfh}"
+# Nur dieses certbot-Zertifikat (--cert-name) gehoert zu nginx. Hooks in
+# /etc/letsencrypt/renewal-hooks/ laufen fuer JEDES Zertifikat auf dem Server -
+# ohne diese Pruefung wuerde z.B. ein Zertifikat ohne www.-Namen das richtige
+# ueberschreiben.
+CERT_NAME="${CERT_NAME:-projekthfh.tech}"
 # certbot setzt RENEWED_LINEAGE auf z.B. /etc/letsencrypt/live/projekthfh.tech
 LINEAGE="${RENEWED_LINEAGE:?nur als certbot --deploy-hook aufrufen (RENEWED_LINEAGE fehlt)}"
 CERT_DIR="$APP_DIR/nginx/certs"
+
+if [ "$(basename "$LINEAGE")" != "$CERT_NAME" ]; then
+  echo "pl2-hfh: $LINEAGE ist nicht '$CERT_NAME' - nichts zu tun."
+  exit 0
+fi
 
 install -m 644 "$LINEAGE/fullchain.pem" "$CERT_DIR/fullchain.pem"
 install -m 600 "$LINEAGE/privkey.pem"   "$CERT_DIR/privkey.pem"
