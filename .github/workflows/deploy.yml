@@ -203,6 +203,14 @@ jobs:
             echo "IMAGE_TAG=${IMAGE_TAG}" >> .env
             # Compose-Konfiguration validieren (faengt z.B. Syntaxfehler ab).
             docker compose --profile sso config --quiet
+            # Warnung, wenn eine nicht versionierte Datei (z.B.
+            # docker-compose.override.yml) die nginx-Konfiguration aus dem Repo
+            # ueberdeckt - Aenderungen an nginx/conf.d kaemen sonst nie live an.
+            conf_src="$(docker compose --profile sso config --format json \
+              | python3 -c 'import json,sys; v=json.load(sys.stdin)["services"]["nginx"].get("volumes",[]); print(next((x.get("source","") for x in v if x.get("target")=="/etc/nginx/conf.d"),""))')"
+            if [ "$conf_src" != "$PWD/nginx/conf.d" ]; then
+              echo "::warning::nginx liest /etc/nginx/conf.d aus '$conf_src' statt aus nginx/conf.d (Override-Datei?) - siehe nginx/README.md, Abschnitt 8."
+            fi
             # Nur nötig, falls das GHCR-Package NICHT public ist:
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
             docker compose --profile sso pull
