@@ -115,6 +115,7 @@ Was passiert, wenn jemand `https://projekthfh.tech/` aufruft:
 | `/static/…` | App | Höheres Burst-Limit; mit `?v=` ein Jahr im Browser-Cache |
 | `/healthz` | App | Kein Eintrag im Zugriffsprotokoll; Deploy und Container prüfen ihn |
 | `/idp/admin/…` | – | Immer 404: Verwaltung ist von außen gesperrt |
+| `/idp/realms/master…` | – | Immer 404: Admin-Realm `master` ist von außen gesperrt (Konsole nur per SSH-Tunnel) |
 | `/idp/…` | Keycloak (`keycloak:8080`) | Höheres Burst-Limit (100), weil die Login-Seite viele Dateien lädt |
 
 nginx nimmt die **längste passende Regel**. `/idp/admin/` ist länger als
@@ -311,6 +312,11 @@ Alle Befehle auf dem Server als root. Es werden keine Passwörter gebraucht.
 Pre- und Post-Hooks aus. Steht dann noch `stop-nginx.sh` im Ordner, stoppt er
 nginx, und die Webroot-Prüfung läuft ins Leere.
 
+> **Schritt 1 ist eine Voraussetzung.** Liefert `curl` dort nicht genau `ok`
+> (sondern z. B. `301 Moved Permanently`), **nicht weitermachen**. Dann ist die
+> neue nginx-Konfiguration nicht aktiv; meist ist eine Override-Datei schuld
+> (Abschnitt 8).
+
 ```bash
 # 1) Prüf-Route testen: nginx muss die Datei über HTTP ausliefern
 mkdir -p /opt/pl2-hfh/nginx/acme-challenge/.well-known/acme-challenge
@@ -441,6 +447,25 @@ docker compose exec nginx nginx -s reload   # 2) ohne Unterbrechung neu laden
 Bei einem Tippfehler meldet Schritt 1 den Fehler, und die alte Konfiguration
 läuft unverändert weiter.
 
+### Keine Override-Dateien für nginx auf dem Server
+
+Docker Compose lädt neben `docker-compose.yml` automatisch eine
+`docker-compose.override.yml`, wenn sie im selben Ordner liegt. Auf dem Server
+ist sie nicht versioniert und bleibt bei jedem Deploy erhalten. Bindet sie
+für nginx einen anderen Ordner als `nginx/conf.d` ein (früher
+`nginx/conf.d.prod`), kommt **keine Änderung an `nginx/conf.d` je live an**.
+Der Deploy läuft trotzdem grün durch.
+
+- Der Deploy gibt in diesem Fall eine Warnung aus:
+  „nginx liest /etc/nginx/conf.d aus … statt aus nginx/conf.d“.
+- Prüfen, welcher Ordner wirklich eingebunden ist:
+  ```bash
+  docker inspect pl2-hfh-nginx-1 \
+    --format '{{range .Mounts}}{{.Source}} -> {{.Destination}}{{"\n"}}{{end}}'
+  ```
+- Produktionswerte für nginx gehören ins Repo (`nginx/conf.d/default.conf`),
+  Geheimnisse in die `.env`.
+
 Lokal testen:
 
 ```bash
@@ -463,6 +488,8 @@ curl -k https://localhost/healthz      # erwartet: {"status":"ok"}
 | Zertifikatswarnung im Browser | Zertifikat abgelaufen oder Test-Zertifikat | `sudo certbot certificates`, dann `sudo certbot renew --dry-run` |
 | `uptime.yml` meldet „Zertifikat läuft ab“ | Erneuerung klappt seit über einer Woche nicht | `sudo journalctl -u certbot` bzw. `/var/log/letsencrypt/letsencrypt.log` |
 | certbot: „Timeout during connect“ / 404 bei der Prüfung | Port 80 zu oder Prüf-Route fehlt | Schritt 1 der Einrichtung wiederholen |
+| certbot: „reader size limit exceeded“ | Prüf-Route nicht aktiv: nginx leitet auf HTTPS und weiter auf die Login-Seite um | Eingebundenen `conf.d`-Ordner prüfen (Abschnitt 8) |
+| Änderung an `nginx/conf.d` wirkt nicht, Deploy grün | Override-Datei bindet anderen Ordner ein | Abschnitt 8, „Keine Override-Dateien“ |
 | `www.` zeigt Zertifikatswarnung, `projekthfh.tech` nicht | In `nginx/certs/` liegt ein Zertifikat ohne `www.` (z. B. `-0001`) | `openssl x509 -in nginx/certs/fullchain.pem -noout -ext subjectAltName`; richtiges Zertifikat erneut kopieren |
 | Deploy bricht bei `nginx -t` ab | Fehler in `nginx/` | Fehlermeldung im Actions-Log lesen; alte Konfiguration läuft weiter |
 | Deploy bricht ab: „certs fehlt“ | `nginx/certs/*.pem` fehlt auf dem Server | Hook-Skript erneut ausführen lassen (`--force-renewal`) oder Dateien kopieren |
