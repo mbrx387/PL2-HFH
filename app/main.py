@@ -1,5 +1,7 @@
 """FastAPI-Einstiegspunkt mit PostgreSQL-Schema-Pruefung und App-Routing."""
 import logging
+import os
+import time
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -108,6 +110,21 @@ app.include_router(auth_router)
 app.include_router(centers.router)
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 templates = Jinja2Templates(directory="app/templates")
+
+
+def _asset_version() -> str:
+    """Versions-Parameter fuer CSS/JS-Links (?v=...).
+
+    nginx cacht /static/-Dateien MIT diesem Parameter ein Jahr lang
+    (nginx/nginx.conf, map $static_cache_control). Jeder Deploy setzt einen
+    neuen IMAGE_TAG (sha-<commit>), dadurch aendert sich die URL und Browser
+    laden die neue Datei. Ohne echten Tag (lokal, "latest") der Startzeitpunkt.
+    """
+    tag = os.getenv("IMAGE_TAG", "").strip()
+    return tag if tag and tag != "latest" else str(int(time.time()))
+
+
+templates.env.globals["asset_version"] = _asset_version()
 
 
 @app.get("/healthz", tags=["meta"])

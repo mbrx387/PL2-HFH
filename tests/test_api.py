@@ -19,8 +19,23 @@ def test_index_renders(client):
     assert "Content-Security-Policy" in res.headers
     assert "unsafe-inline" not in res.headers["Content-Security-Policy"]
     # Neue Oberflaeche (aus frontend/ integriert) mit eigenem Skript.
-    assert 'src="/static/js/main.js"' in res.text
+    # Mit Versions-Parameter, damit nginx die Datei lange cachen darf.
+    assert 'src="/static/js/main.js?v=' in res.text
+    assert 'href="/static/css/style.css?v=' in res.text
     assert 'id="view-einrichtungen"' in res.text
+
+
+@pytest.mark.parametrize(("tag", "expected"), [("sha-1a2b3c4", "sha-1a2b3c4"), ("latest", None), ("", None)])
+def test_asset_version_follows_image_tag(monkeypatch, tag, expected):
+    from app.main import _asset_version
+
+    monkeypatch.setenv("IMAGE_TAG", tag)
+    version = _asset_version()
+    if expected:
+        assert version == expected
+    else:
+        # Kein echter Tag: Startzeitpunkt, damit Browser lokal nicht ewig cachen.
+        assert version.isdigit()
 
 
 def test_static_assets_are_served(client):

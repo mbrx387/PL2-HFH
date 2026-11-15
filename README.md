@@ -54,8 +54,12 @@ PL2-HFH/
 ├── keycloak/configure.sh         # dieselben Einstellungen für einen bestehenden Realm (kcadm.sh)
 ├── nginx/
 │   ├── nginx.conf
-│   └── conf.d/default.conf       # TLS-Terminierung, Reverse Proxy, Rate-Limit, /idp/-Route (Keycloak)
+│   ├── conf.d/default.conf       # TLS-Terminierung, Reverse Proxy, Rate-Limit, /idp/-Route (Keycloak)
+│   ├── conf.d/security-headers.inc  # Basis-Sicherheitsheader (per include)
+│   ├── acme-challenge/           # Webroot fuer certbot (Inhalt nicht im Git)
+│   └── README.md                 # nginx + certbot einfach erklaert
 ├── scripts/generate_dev_cert.sh  # Self-signed Zertifikat für lokale Tests
+├── scripts/certbot-deploy-hook.sh # certbot: Zertifikat kopieren + nginx neu laden
 ├── tests/                        # Pytest (API, Auth-Middleware, Fail-Fast-Checks)
 ├── .github/workflows/deploy.yml  # CI: Lint + Tests -> Image-Build -> Deploy per SSH
 ├── docker-compose.yml
@@ -137,12 +141,13 @@ Beratungsstellen) verarbeitet werden und die Anwendung öffentlich erreichbar
 sein wird, war Sicherheit von Anfang an Teil des Grundgerüsts, nicht
 nachträglich aufgesetzt:
 
-- **HTTPS/TLS**: Terminierung in nginx. Für den Produktivbetrieb auf dem
-  Ubuntu-Server wird ein echtes Zertifikat über **Let's Encrypt / certbot**
-  bezogen (siehe [Roadmap](docs/ROADMAP.md) – im Grundgerüst liegt dafür ein
-  Script für ein selbstsigniertes Dev-Zertifikat bereit:
-  `scripts/generate_dev_cert.sh`). HTTP wird per 301 auf HTTPS umgeleitet,
-  `Strict-Transport-Security` ist gesetzt.
+- **HTTPS/TLS**: Terminierung in nginx. Auf dem Server stellt **certbot**
+  das Let's-Encrypt-Zertifikat aus und verlängert es (Webroot-Methode über
+  `/.well-known/acme-challenge/`, Deploy-Hook `scripts/certbot-deploy-hook.sh`
+  kopiert es nach `nginx/certs/` und lädt nginx neu); lokal gibt es ein
+  selbstsigniertes Dev-Zertifikat über `scripts/generate_dev_cert.sh`.
+  HTTP wird per 301 auf HTTPS umgeleitet, `Strict-Transport-Security` ist
+  gesetzt. Einrichtung und Fallstricke: [`nginx/README.md`](nginx/README.md).
 - **Security-Header**: `X-Content-Type-Options`, `X-Frame-Options`,
   `Content-Security-Policy`, `Referrer-Policy`, `Permissions-Policy` werden
   in der Anwendung selbst gesetzt (`app/security.py`) – unabhängig vom
@@ -268,8 +273,9 @@ Einmalig auf dem Server nötig, weil das Keycloak-Client-Secret erst nach dem
 Realm-Import existiert:
 
 1. **`.env` anlegen** unter `/opt/pl2-hfh/.env` (Vorlage: `.env.example`),
-   alle Werte außer `OIDC_CLIENT_SECRET` setzen. TLS-Zertifikat nach
-   `nginx/certs/fullchain.pem` und `privkey.pem` legen.
+   alle Werte außer `OIDC_CLIENT_SECRET` setzen. TLS-Zertifikat per certbot
+   ausstellen und nach `nginx/certs/fullchain.pem` und `privkey.pem` legen
+   (Schritt für Schritt: [`nginx/README.md`](nginx/README.md), Abschnitt certbot).
 2. **Keycloak starten:** `docker compose --profile sso up -d keycloak-db keycloak`
 3. **Admin-Konsole per SSH-Tunnel** öffnen (öffentlich gesperrt):
    `ssh -L 8080:localhost:8080 <user>@<server>`, dann

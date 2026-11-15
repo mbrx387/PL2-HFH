@@ -18,3 +18,7 @@ nginx/certs/*.crt
 
 # Persoenliche Editor-Einstellungen
 .vscode/
+
+# certbot-Challenge-Dateien (Webroot), nur kurzzeitig auf dem Server
+nginx/acme-challenge/*
+!nginx/acme-challenge/.gitkeep

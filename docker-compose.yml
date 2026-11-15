@@ -1,7 +1,16 @@
+# Docker-Logs pro Container begrenzen (Default "json-file" waechst sonst
+# unbegrenzt und kann die Festplatte fuellen): max. 5 x 10 MB je Dienst.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
 services:
   app-db:
     image: postgres:16-alpine
     restart: unless-stopped
+    logging: *default-logging
     environment:
       POSTGRES_DB: pflegedb
       POSTGRES_USER: pl2
@@ -35,6 +44,7 @@ services:
       app-db:
         condition: service_healthy
     restart: unless-stopped
+    logging: *default-logging
     expose:
       - "8000" # nur im internen Docker-Netzwerk erreichbar, nicht am Host
     networks:
@@ -57,6 +67,7 @@ services:
   nginx:
     image: nginx:1.31-alpine
     restart: unless-stopped
+    logging: *default-logging
     depends_on:
       app:
         condition: service_healthy
@@ -67,8 +78,19 @@ services:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/conf.d:/etc/nginx/conf.d:ro
       - ./nginx/certs:/etc/nginx/certs:ro
+      # certbot (Webroot) schreibt die Challenge-Dateien auf dem Host nach
+      # nginx/acme-challenge/, nginx liefert sie unter
+      # /.well-known/acme-challenge/ aus (siehe nginx/README.md, certbot).
+      - ./nginx/acme-challenge:/var/www/certbot:ro
     networks:
       - internal
+    healthcheck:
+      # Prueft den ganzen Weg: TLS-Handshake -> nginx -> App.
+      test: ["CMD", "curl", "-fsk", "-o", "/dev/null", "https://localhost/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
   # Keycloak (SSO) + eigene Postgres-DB. Aktivieren mit:
   #   docker compose --profile sso up -d
@@ -78,6 +100,7 @@ services:
     image: postgres:16-alpine
     profiles: ["sso"]
     restart: unless-stopped
+    logging: *default-logging
     environment:
       POSTGRES_DB: keycloak
       POSTGRES_USER: keycloak
@@ -101,6 +124,7 @@ services:
     command: ${KC_COMMAND:-start} --import-realm
     profiles: ["sso"]
     restart: unless-stopped
+    logging: *default-logging
     depends_on:
       keycloak-db:
         condition: service_healthy
