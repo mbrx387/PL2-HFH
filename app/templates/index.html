@@ -47,6 +47,12 @@
                     <span class="nav-icon" aria-hidden="true">◷</span>
                     Versandhistorie
                 </a>
+                {% if can_manage_users %}
+                <a href="#benutzer" class="nav-link" data-view="benutzer">
+                    <span class="nav-icon" aria-hidden="true">⌂</span>
+                    Benutzer
+                </a>
+                {% endif %}
             </nav>
 
             <div class="sidebar-footer">
