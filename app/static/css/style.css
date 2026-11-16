@@ -999,3 +999,104 @@ button:disabled {
     grid-template-columns: 1fr;
   }
 }
+
+
+/* ---------- Dashboard-Begrüßung und Systemstatus (Start) ---------- */
+.dashboard-welcome {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  margin-bottom: 1.25rem;
+  padding: 1.5rem 1.65rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  background: linear-gradient(115deg, var(--accent-soft), #fff 75%);
+}
+.dashboard-eyebrow {
+  margin: 0;
+  color: var(--accent-dark);
+  font-size: .75rem;
+  font-weight: 700;
+  letter-spacing: .1em;
+}
+.dashboard-welcome h2 {
+  margin: .3rem 0 .5rem;
+  color: var(--text-main);
+  font-size: clamp(1.4rem, 3vw, 2rem);
+}
+.dashboard-welcome p:last-child {
+  max-width: 650px;
+  margin: 0;
+  color: var(--text-muted);
+}
+.dashboard-welcome-icon {
+  display: flex;
+  flex: 0 0 3.5rem;
+  width: 3.5rem;
+  height: 3.5rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 1rem;
+  background: #fff;
+  color: var(--accent-dark);
+  font-size: 2rem;
+}
+.overview-card strong { overflow-wrap: anywhere; }
+.dashboard-status { margin-top: 1.25rem; }
+.dashboard-status-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+.dashboard-status-heading h2 { margin: 0 0 .35rem; }
+.dashboard-status-heading p, .dashboard-status-note {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: .9rem;
+}
+.status-pill {
+  display: inline-flex;
+  flex: 0 0 auto;
+  padding: .4rem .7rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--page-bg);
+  color: var(--text-muted);
+  font-size: .8rem;
+  font-weight: 650;
+}
+.status-pill.is-online {
+  border-color: #b8dfc7;
+  background: #edf8f1;
+  color: #21633b;
+}
+.status-pill.is-offline {
+  border-color: #efc2c2;
+  background: #fff1f1;
+  color: #9a3030;
+}
+.dashboard-status-list {
+  display: grid;
+  margin: 0 0 .9rem;
+  padding: 0;
+  list-style: none;
+}
+.dashboard-status-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: .75rem 0;
+  border-top: 1px solid var(--line);
+}
+.dashboard-status-list li span { color: var(--text-muted); }
+.dashboard-status-list li strong { text-align: right; font-size: .9rem; }
+.dashboard-status-note { font-size: .82rem; }
+@media (max-width: 760px) {
+  .dashboard-welcome-icon { display: none; }
+  .dashboard-status-heading, .dashboard-status-list li { flex-direction: column; }
+  .dashboard-status-list li strong { text-align: left; }
+}
+
