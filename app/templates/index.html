@@ -479,6 +479,73 @@
                 </section>
             </section>
 
+            <!-- ANFANG: BEDIENÜBERSICHT -->
+      <section class="directory-panel help-panel" aria-labelledby="help-heading">
+                    <div class="help-heading">
+                        <div>
+                            <h2 id="help-heading">So verwenden Sie das Portal</h2>
+                            <p>Die folgenden Schritte geben Ihnen einen kurzen Überblick über die wichtigsten Funktionen.</p>
+                        </div>
+                    </div>
+
+                    <div class="help-steps">
+                        <article class="help-step">
+                            <span class="help-step-number" aria-hidden="true">1</span>
+                            <div class="help-step-content">
+                                <h3>Einrichtungen finden</h3>
+                                <p>Öffnen Sie das Einrichtungsverzeichnis. Suchen Sie nach Name, Ort oder Postleitzahl. Über die Filter können Sie die Ergebnisse zusätzlich nach Angebot und Bundesland eingrenzen.</p>
+                                <button type="button" class="help-action" data-open-view="einrichtungen">Zum Einrichtungsverzeichnis <span aria-hidden="true">→</span></button>
+                            </div>
+                        </article>
+
+                        <article class="help-step">
+                            <span class="help-step-number" aria-hidden="true">2</span>
+                            <div class="help-step-content">
+                                <h3>Einrichtungen auswählen</h3>
+                                <p>Wählen Sie in der Ergebnisliste eine oder mehrere Einrichtungen aus. Die Auswahl wird für die Vorbereitung einer Nachricht übernommen. Sie können die Auswahl jederzeit ändern.</p>
+                                <button type="button" class="help-action" data-open-view="einrichtungen">Einrichtungen auswählen <span aria-hidden="true">→</span></button>
+                            </div>
+                        </article>
+
+                        <article class="help-step">
+                            <span class="help-step-number" aria-hidden="true">3</span>
+                            <div class="help-step-content">
+                                <h3>Einrichtungsdaten pflegen</h3>
+                                <p>Benutzer mit entsprechender Berechtigung können neue Einrichtungen anlegen, vorhandene Angaben bearbeiten oder Datensätze deaktivieren. Pflichtfelder sind im Formular mit einem Stern (*) gekennzeichnet.</p>
+                                {% if can_edit %}
+                                <button type="button" class="help-action" data-open-view="datenpflege">Zur Datenpflege <span aria-hidden="true">→</span></button>
+                                {% else %}
+                                <span class="help-note">Dieser Bereich ist nur mit entsprechender Bearbeitungsberechtigung verfügbar.</span>
+                                {% endif %}
+                            </div>
+                        </article>
+
+                        <article class="help-step">
+                            <span class="help-step-number" aria-hidden="true">4</span>
+                            <div class="help-step-content">
+                                <h3>E-Mail vorbereiten</h3>
+                                <p>Wechseln Sie zur E-Mail-Zentrale. Die Adressen der ausgewählten Einrichtungen werden übernommen. Ergänzen Sie Betreff und Nachricht und wählen Sie „E-Mail vorbereiten“. Ihr lokales Mailprogramm öffnet sich; der Server versendet die Nachricht nicht selbst. Die Empfänger werden im BCC-Feld eingetragen.</p>
+                                <button type="button" class="help-action" data-open-view="email">Zur E-Mail-Zentrale <span aria-hidden="true">→</span></button>
+                            </div>
+                        </article>
+
+                        <article class="help-step">
+                            <span class="help-step-number" aria-hidden="true">5</span>
+                            <div class="help-step-content">
+                                <h3>Versandhistorie aufrufen</h3>
+                                <p>Im Bereich Versandhistorie ist die vorgesehene Übersicht früherer Versandvorgänge erreichbar. Die Anzeige ist in der aktuellen Projektversion noch nicht an eine Historien-Schnittstelle angebunden.</p>
+                                <button type="button" class="help-action" data-open-view="historie">Zur Versandhistorie <span aria-hidden="true">→</span></button>
+                            </div>
+                        </article>
+                    </div>
+
+                    <aside class="help-tip">
+                        <strong>Hinweis zu Benutzerrechten</strong>
+                        <p>Welche Funktionen Ihnen zur Verfügung stehen, hängt von Ihrer Benutzerrolle ab. Wenn ein Bereich nicht angezeigt wird, fehlt möglicherweise die entsprechende Berechtigung.</p>
+                    </aside>
+                </section>
+<!-- ENDE: BEDIENÜBERSICHT -->
+            
             <footer class="workspace-footer">
                 <span>Pflegezentren-Finder · HFH · ProjektLab 2</span>
             </footer>
