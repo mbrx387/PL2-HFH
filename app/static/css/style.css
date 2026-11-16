@@ -1099,4 +1099,7 @@ button:disabled {
   .dashboard-status-heading, .dashboard-status-list li { flex-direction: column; }
   .dashboard-status-list li strong { text-align: left; }
 }
-
+/* Benutzerverwaltung (Start) */
+.user-create-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; margin-top: 1rem; }
+.user-create-form > button { justify-self: start; align-self: end; }
+@media (max-width: 700px) { .user-create-form { grid-template-columns: 1fr; } }
