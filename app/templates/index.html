@@ -426,6 +426,16 @@
             <!-- ANSICHT: ÜBERSICHT -->
             <section class="page-view" id="view-dashboard" hidden>
 
+                <!-- BEGRÜßUNGSBEREICH (START) -->
+                <section class="dashboard-welcome" aria-labelledby="dashboard-welcome-title">
+                    <div>
+                        <p class="dashboard-eyebrow">PFLEGEZENTREN-FINDER</p>
+                        <h2 id="dashboard-welcome-title">Willkommen im Pflegezentren-Finder!</h2>
+                        <p>Hier finden Sie die wichtigsten Funktionen und den aktuellen Überblick über das Einrichtungsverzeichnis.</p>
+                    </div>
+                    <span class="dashboard-welcome-icon" aria-hidden="true">⌂</span>
+                </section>
+                
                 <div class="section-heading">
                     <div>
                         <h2>Projektübersicht</h2>
@@ -514,6 +524,7 @@
                                 <p>Benutzer mit entsprechender Berechtigung können neue Einrichtungen anlegen, vorhandene Angaben bearbeiten oder Datensätze deaktivieren. Pflichtfelder sind im Formular mit einem Stern (*) gekennzeichnet.</p>
                                 {% if can_edit %}
                                 <button type="button" class="help-action" data-open-view="datenpflege">Zur Datenpflege <span aria-hidden="true">→</span></button>
+                                <button type="button" class="help-action" id="quick-new-center">Neue Einrichtung anlegen <span aria-hidden="true">→</span></button>
                                 {% else %}
                                 <span class="help-note">Dieser Bereich ist nur mit entsprechender Bearbeitungsberechtigung verfügbar.</span>
                                 {% endif %}
@@ -545,6 +556,23 @@
                     </aside>
                 </section>
 <!-- ENDE: BEDIENÜBERSICHT -->
+
+<!-- System- und Datenstatus (Start) -->
+            <section class="directory-panel dashboard-status" aria-labelledby="dashboard-status-title">
+                    <div class="dashboard-status-heading">
+                        <div>
+                            <h2 id="dashboard-status-title">System- und Datenstatus</h2>
+                            <p>Aktueller Stand der Datenanbindung und E-Mail-Funktionen.</p>
+                        </div>
+                        <span class="status-pill" id="dashboard-data-status" role="status" aria-live="polite">Daten werden geprüft …</span>
+                    </div>
+                    <ul class="dashboard-status-list">
+                        <li><span>Einrichtungsverzeichnis</span><strong id="dashboard-api-status">Wird geprüft</strong></li>
+                        <li><span>Versandhistorie</span><strong>Noch nicht angebunden</strong></li>
+                        <li><span>E-Mail-Versand</span><strong>Über lokales Mailprogramm</strong></li>
+                    </ul>
+                    <p class="dashboard-status-note">Die Statusanzeige prüft nur den Abruf der Einrichtungsdaten. Sie prüft weder die Datenbank unabhängig davon noch den E-Mail-Versand.</p>
+                </section>
             
             <footer class="workspace-footer">
                 <span>Pflegezentren-Finder · HFH · ProjektLab 2</span>
