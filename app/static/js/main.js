@@ -564,7 +564,18 @@ async function loadDashboardCount() {
 /* ------------------------------------------------------------------ */
 /* Benutzerverwaltung – nur Frontend, kein Keycloak-Code              */
 /* ------------------------------------------------------------------ */
+function filterUsers() {
+  const searchInput = $("users-search");
+  const table = $("users-table-body");
+  if (!searchInput || !table) return;
 
+  const query = searchInput.value.trim().toLocaleLowerCase("de-DE");
+  for (const row of table.querySelectorAll("tr")) {
+    const username = (row.cells[0]?.textContent || "").toLocaleLowerCase("de-DE");
+    const email = (row.cells[1]?.textContent || "").toLocaleLowerCase("de-DE");
+    row.hidden = !username.includes(query) && !email.includes(query);
+  }
+}
 // Benutzer aus der vorhandenen FastAPI-Schnittstelle laden.
 async function loadUsers() {
   const table = $("users-table-body");
