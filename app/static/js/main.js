@@ -641,12 +641,17 @@ function bindEvents() {
 }
 
 bindEvents();
-const initialView = window.location.hash.slice(1) || "einrichtungen";
-if (initialView === "datenpflege" && canEdit) openCenterForm(null);
-else showView(initialView);
+
+const initialView =
+  window.location.hash.slice(1) || "einrichtungen";
+
+if (initialView === "datenpflege" && canEdit) {
+  openCenterForm(null);
+} else {
+  showView(initialView);
+}
+
 loadBundeslaender();
 loadCenters();
-loadDashboardCount();
-updateSelectionUi();
 loadDashboardCount();
 updateSelectionUi();
