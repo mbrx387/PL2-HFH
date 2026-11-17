@@ -9,8 +9,8 @@
     <script src="/static/js/main.js?v={{ asset_version }}" defer></script>
 </head>
 
-    <!-- Berechtigung für Benutzerverwaltung als Datenattribut für JavaScript -->
-<body data-can-edit="{{ 'true' if can_edit else 'false' }}" data-can-manage-users="{{ 'true' if can_manage_users else 'false' }}">
+    <!-- Berechtigung editor/admin für Benutzerverwaltung -->
+<body data-can-edit="{{ 'true' if can_edit else 'false' }}">
     <div class="workspace">
 
         <!-- Linke Navigation -->
@@ -48,9 +48,9 @@
                     <span class="nav-icon" aria-hidden="true">◷</span>
                     Versandhistorie
                 </a>
-                {% if can_manage_users %}
+                 {% if can_edit %}
                 <a href="#benutzer" class="nav-link" data-view="benutzer">
-                    <span class="nav-icon" aria-hidden="true">⌂</span>
+                    <span class="nav-icon" aria-hidden="true">♙</span>
                     Benutzer
                 </a>
                 {% endif %}
@@ -424,8 +424,8 @@
                 </section>
             </section>
 
-                        <!-- Keycloak-Benutzerverwaltung, nur für Admins -->
-            {% if can_manage_users %}
+                        <!-- Keycloak-Benutzerverwaltung, nur für editor/admins -->
+        {% if can_edit %}
             <section class="page-view" id="view-benutzer" hidden>
                 <div class="section-heading"><div>
                     <h2>Benutzerverwaltung</h2>
@@ -440,7 +440,7 @@
                         <div class="form-field"><label for="user-password">Temporäres Passwort *</label><input id="user-password" type="password" required minlength="12" autocomplete="new-password"></div>
                         <div class="form-field"><label for="user-group">Zugriffsgruppe *</label>
                             <select id="user-group" required><option value="Lesend">Lesend</option><option value="Redaktion">Redaktion</option><option value="Admins">Admins</option></select>
-                        </div>
+                       </div>
                         <button class="action-button" type="submit">Benutzer anlegen</button>
                     </form>
                     <p id="user-message" class="form-message" role="status" aria-live="polite"></p>
