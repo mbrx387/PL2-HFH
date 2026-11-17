@@ -38,6 +38,7 @@ const VIEWS = {
   datenpflege: { title: "Datenpflege", desc: "Einrichtungen anlegen, bearbeiten oder deaktivieren." },
   email: { title: "E-Mail-Zentrale", desc: "Nachrichten an ausgewählte Einrichtungen vorbereiten." },
   historie: { title: "Versandhistorie", desc: "Dokumentierte Versandvorgänge nachvollziehen." },
+  benutzer: { title: "Benutzerverwaltung", desc: "Benutzerkonten verwalten." },
 };
 
 const canEdit = document.body.dataset.canEdit === "true";
@@ -124,7 +125,9 @@ function setMessage(node, text, kind) {
 /* ------------------------------------------------------------------ */
 
 function showView(name) {
-  if (!VIEWS[name] || (name === "datenpflege" && !canEdit) || (name === "benutzer" && !canManageUsers)) name = "einrichtungen";
+   if (!VIEWS[name] || ((name === "datenpflege" || name === "benutzer") && !canEdit)) {
+    name = "einrichtungen";
+  }
 
   document.querySelectorAll(".page-view").forEach((view) => {
     view.hidden = view.id !== `view-${name}`;
@@ -144,9 +147,7 @@ function showView(name) {
     history.replaceState(null, "", `#${name}`);
   }
   if (name === "email") renderEmailRecipients();
-  window.scrollTo(0, 0);
-  // Benutzerliste beim Öffnen laden.
-  if (name === "benutzer" && canManageUsers) loadUsers();
+ if (name === "benutzer" && canEdit) loadUsers();
   window.scrollTo(0, 0);
 }
 
@@ -561,15 +562,100 @@ async function loadDashboardCount() {
 }
 
 /* ------------------------------------------------------------------ */
+/* Benutzerverwaltung – nur Frontend, kein Keycloak-Code              */
+/* ------------------------------------------------------------------ */
+
+// Benutzer aus der vorhandenen FastAPI-Schnittstelle laden.
+async function loadUsers() {
+  const table = $("users-table-body");
+  const message = $("users-list-message");
+  if (!table || !message) return;
+
+  table.replaceChildren();
+  setMessage(message, "Benutzer werden geladen …");
+
+  try {
+    const users = await api("/api/admin/users");
+    if (!Array.isArray(users)) throw new Error("Ungültige Antwort der Benutzer-API.");
+
+    for (const user of users) {
+      const row = el("tr");
+      row.appendChild(el("td", null, user.username || "–"));
+      row.appendChild(el("td", null, user.email || "–"));
+      row.appendChild(el("td", null, user.enabled ? "Aktiv" : "Deaktiviert"));
+
+      const actions = el("td");
+      const button = el("button", "secondary-button", user.enabled ? "Deaktivieren" : "Aktivieren");
+      button.type = "button";
+      button.disabled = Boolean(user.is_self);
+      if (user.is_self) button.title = "Eigenes Konto kann nicht deaktiviert werden";
+
+      button.addEventListener("click", async () => {
+        if (!confirm(`Benutzer „${user.username}“ ${user.enabled ? "deaktivieren" : "aktivieren"}?`)) return;
+        button.disabled = true;
+        try {
+          await api(`/api/admin/users/${encodeURIComponent(user.id)}/enabled`, {
+            method: "PUT",
+            body: JSON.stringify({ enabled: !user.enabled }),
+          });
+          await loadUsers();
+        } catch (error) {
+          setMessage(message, error.message, "error");
+          button.disabled = false;
+        }
+      });
+
+      actions.appendChild(button);
+      row.appendChild(actions);
+      table.appendChild(row);
+    }
+
+    setMessage(message, users.length ? `${users.length} Benutzer angezeigt.` : "Noch keine Benutzer vorhanden.");
+  } catch (error) {
+    setMessage(message, `Benutzer konnten nicht geladen werden: ${error.message}`, "error");
+  }
+}
+
+// Formular sendet Daten an FastAPI; Keycloak wird nicht im Browser angesprochen.
+async function createUser(event) {
+  event.preventDefault();
+  const form = $("user-create-form");
+  const message = $("user-message");
+  const button = form.querySelector('button[type="submit"]');
+  button.disabled = true;
+
+  try {
+    await api("/api/admin/users", {
+      method: "POST",
+      body: JSON.stringify({
+        username: $("user-username").value.trim(),
+        email: $("user-email").value.trim(),
+        password: $("user-password").value,
+        group: $("user-group").value,
+      }),
+    });
+    form.reset();
+    setMessage(message, "Benutzer erfolgreich angelegt.", "success");
+    await loadUsers();
+  } catch (error) {
+    setMessage(message, `Benutzer konnte nicht angelegt werden: ${error.message}`, "error");
+  } finally {
+    button.disabled = false;
+  }
+}
+
+/* ------------------------------------------------------------------ */
 /* Start                                                               */
 /* ------------------------------------------------------------------ */
 
 function bindEvents() {
  // Admin-Funktionen nur binden, wenn der Bereich vorhanden ist.
-  if (canManageUsers) {
-    $("user-create-form").addEventListener("submit", createUser);
-    $("users-refresh").addEventListener("click", loadUsers);
-  }
+  if (canEdit) {
+    const userForm = $("user-create-form");
+    const usersRefresh = $("users-refresh");
+    if (userForm) userForm.addEventListener("submit", createUser);
+    if (usersRefresh) usersRefresh.addEventListener("click", loadUsers);
+ 
   document.querySelectorAll(".nav-link").forEach((link) => {
     link.addEventListener("click", (event) => {
       event.preventDefault();
@@ -634,24 +720,18 @@ function bindEvents() {
     $("center-form").addEventListener("submit", saveCenter);
     $("deactivate-center").addEventListener("click", deactivateCenter);
     $("new-center").addEventListener("click", () => openCenterForm(null));
-    // NEU AP6: Nur ein Schnellzugriff mit eindeutiger ID.
     const quickNew = $("quick-new-center");
     if (quickNew) quickNew.addEventListener("click", () => openCenterForm(null));
   }
 }
 
 bindEvents();
-
-const initialView =
-  window.location.hash.slice(1) || "einrichtungen";
-
-if (initialView === "datenpflege" && canEdit) {
-  openCenterForm(null);
-} else {
-  showView(initialView);
-}
-
+const initialView = window.location.hash.slice(1) || "einrichtungen";
+if (initialView === "datenpflege" && canEdit) openCenterForm(null);
+else showView(initialView);
 loadBundeslaender();
 loadCenters();
+loadDashboardCount();
+updateSelectionUi();
 loadDashboardCount();
 updateSelectionUi();
