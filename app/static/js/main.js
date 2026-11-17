@@ -124,7 +124,7 @@ function setMessage(node, text, kind) {
 /* ------------------------------------------------------------------ */
 
 function showView(name) {
-  if (!VIEWS[name] || (name === "datenpflege" && !canEdit)) name = "einrichtungen";
+  if (!VIEWS[name] || (name === "datenpflege" && !canEdit) || (name === "benutzer" && !canManageUsers)) name = "einrichtungen";
 
   document.querySelectorAll(".page-view").forEach((view) => {
     view.hidden = view.id !== `view-${name}`;
@@ -144,6 +144,9 @@ function showView(name) {
     history.replaceState(null, "", `#${name}`);
   }
   if (name === "email") renderEmailRecipients();
+  window.scrollTo(0, 0);
+  // Benutzerliste beim Öffnen laden.
+  if (name === "benutzer" && canManageUsers) loadUsers();
   window.scrollTo(0, 0);
 }
 
@@ -562,6 +565,11 @@ async function loadDashboardCount() {
 /* ------------------------------------------------------------------ */
 
 function bindEvents() {
+ // Admin-Funktionen nur binden, wenn der Bereich vorhanden ist.
+  if (canManageUsers) {
+    $("user-create-form").addEventListener("submit", createUser);
+    $("users-refresh").addEventListener("click", loadUsers);
+  }
   document.querySelectorAll(".nav-link").forEach((link) => {
     link.addEventListener("click", (event) => {
       event.preventDefault();
@@ -626,7 +634,9 @@ function bindEvents() {
     $("center-form").addEventListener("submit", saveCenter);
     $("deactivate-center").addEventListener("click", deactivateCenter);
     $("new-center").addEventListener("click", () => openCenterForm(null));
-    $("quick-new-center").addEventListener("click", () => openCenterForm(null));
+    // NEU AP6: Nur ein Schnellzugriff mit eindeutiger ID.
+    const quickNew = $("quick-new-center");
+    if (quickNew) quickNew.addEventListener("click", () => openCenterForm(null));
   }
 }
 
@@ -636,5 +646,7 @@ if (initialView === "datenpflege" && canEdit) openCenterForm(null);
 else showView(initialView);
 loadBundeslaender();
 loadCenters();
+loadDashboardCount();
+updateSelectionUi();
 loadDashboardCount();
 updateSelectionUi();
