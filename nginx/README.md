@@ -130,8 +130,10 @@ Regeln haben Vorrang vor `/idp/` und ignorieren Groß- und Kleinschreibung.
 nginx/
 ├── nginx.conf                Grundeinstellungen (Hausordnung)
 ├── conf.d/
-│   ├── default.conf          Regeln für unsere Seite (Wegweiser am Empfang)
 │   └── security-headers.inc  Sicherheits-Header, per include eingebunden
+├── templates/sites/
+│   └── default.conf.template Regeln für unsere Seite (Wegweiser am Empfang),
+│                             mit ${PUBLIC_HOST} statt festem Hostnamen
 ├── certs/                    Zertifikat + privater Schlüssel (NICHT im Git)
 ├── acme-challenge/           Ablage für certbot-Prüfdateien (NICHT im Git)
 └── README.md                 diese Datei
@@ -148,16 +150,34 @@ nginx/
 | `limit_req_status 429` | Wer zu oft klingelt, bekommt „429 zu viele Anfragen“ |
 | `map $upstream_http_…` | Sicherheits-Header nur setzen, wenn die App keinen eigenen schickt |
 | `map $arg_v …` | Cache-Regel für CSS/JS: mit Versionsnummer lange, sonst immer nachfragen |
-| `map $host $canonical_host` | `www.projekthfh.tech` gilt als `projekthfh.tech` |
 
-### `conf.d/default.conf` – der Wegweiser
+### `templates/sites/default.conf.template` – der Wegweiser
+
+Derselbe Wegweiser läuft auf **INT** (`projekthfh.tech`) und **PROD**
+(HFH-Domain). Deshalb steht der Hostname nicht fest in der Datei, sondern als
+`${PUBLIC_HOST}`:
+
+```
+templates/sites/default.conf.template ──(Container-Start bzw. Deploy: envsubst)──► /etc/nginx/sites/default.conf
+        server_name ${PUBLIC_HOST} …                                                 server_name projekthfh.tech …
+```
+
+- Das offizielle nginx-Image rendert Dateien aus `/etc/nginx/templates/` beim
+  Start selbst. `NGINX_ENVSUBST_FILTER=^PUBLIC_HOST$` sorgt dafür, dass **nur**
+  `${PUBLIC_HOST}` ersetzt wird, nginx-Variablen wie `$host` bleiben stehen.
+- `PUBLIC_HOST` steht in der Server-`.env`. Der Deploy leitet ihn bei jedem
+  Lauf aus `APP_PUBLIC_URL` ab (`https://projekthfh.tech` → `projekthfh.tech`),
+  von Hand muss man ihn nicht pflegen. Lokal ist er `pl2-hfh.localhost`.
+- Der Deploy rendert das Template vor `nginx -t` und Reload neu, damit
+  Änderungen ohne Container-Neustart live gehen.
+- `map $host $canonical_host` (`www.<host>` gilt als `<host>`) steht mit im Template.
 
 Die Datei hat vier Blöcke (`server`), oben in der Datei kurz beschrieben:
 
 1. **Port 80, bekannte Hosts:** certbot-Prüfdateien ausliefern, sonst auf HTTPS umleiten.
 2. **Unbekannte Hosts:** abweisen, ohne das Zertifikat zu zeigen.
 3. **Port 443, `www.`:** auf die Hauptadresse umleiten.
-4. **Port 443, `projekthfh.tech` und `localhost`:** die eigentliche Anwendung.
+4. **Port 443, `${PUBLIC_HOST}` und `localhost`:** die eigentliche Anwendung.
 
 | Einstellung | Bedeutung |
 |---|---|
@@ -182,8 +202,10 @@ dort, wo sie fehlen, zum Beispiel bei Umleitungen, 404 oder 502. Unter `/idp/`
 setzt nginx bewusst kein `X-Frame-Options`, weil Keycloak das für einige Seiten
 selbst regelt.
 
-**Domain geändert?** Dann `server_name` in den Blöcken 1, 3 und 4 sowie die
-`map $canonical_host` in `nginx.conf` anpassen.
+**Domain geändert?** Nur `APP_PUBLIC_URL` (und die übrigen URLs) in der
+Server-`.env` anpassen und neu deployen. nginx übernimmt den Namen beim nächsten
+Deploy, die Konfiguration im Repo bleibt gleich. Danach das Zertifikat für den
+neuen Namen beantragen (Abschnitt 7, „Einrichtung auf einem neuen Server“).
 
 ---
 
@@ -193,24 +215,25 @@ nginx ist ein fertiges, offizielles Docker-Image (`nginx:1.31-alpine`). Wir
 bauen es nicht selbst, sondern geben ihm nur unsere Konfiguration mit.
 
 ```
-GitHub (Push oder PR)
+GitHub (PR oder Merge nach main)
    │
    ├─ Tests + "nginx -t" mit dem echten nginx-Image (fängt Tippfehler ab)
    │
-   └─ nur bei Push auf main:
-        App-Image bauen ──► Server per SSH
+   └─ App-Image bauen ──► INT-Server per SSH (PR: PR-Commit, Merge: main)
+                     └──► danach, nur nach Merge: PROD-Server (gleiche Schritte)
                               │
-                              ├─ git reset --hard origin/main
+                              ├─ git reset --hard <Commit>
                               ├─ prüfen: .env vollständig? certs/*.pem vorhanden?
+                              ├─ PUBLIC_HOST aus APP_PUBLIC_URL in .env schreiben
                               ├─ docker compose --profile sso pull + up -d
-                              ├─ nginx -t  ──► nginx -s reload   (neue Konfiguration live)
+                              ├─ Template rendern ──► nginx -t ──► nginx -s reload   (neue Konfiguration live)
                               └─ Health check: https://localhost/healthz
 ```
 
 Aus `docker-compose.yml`:
 
 - **Ports:** nur nginx veröffentlicht `80:80` und `443:443`.
-- **Ordner:** `nginx.conf`, `conf.d/`, `certs/` und `acme-challenge/` werden
+- **Ordner:** `nginx.conf`, `conf.d/`, `templates/`, `certs/` und `acme-challenge/` werden
   **nur lesbar** (`:ro`) in den Container eingebunden.
 - **Start-Reihenfolge:** nginx startet erst, wenn die App „gesund“ ist.
 - **Eigener Healthcheck:** alle 30 s `https://localhost/healthz` von innen.
@@ -224,6 +247,10 @@ Zusätzlich prüft `.github/workflows/uptime.yml` jeden Morgen von außen, ob
 ---
 
 ## 7. certbot: der Ausweis-Erneuerer
+
+> Die Beispiele zeigen den **INT-Server** (`projekthfh.tech`). Auf dem
+> PROD-Server (HFH) läuft dasselbe mit dessen Domain, siehe
+> [`docs/BETRIEB.md`](../docs/BETRIEB.md).
 
 ### Was certbot macht – im Bild
 
@@ -286,8 +313,10 @@ certbot.timer (2× täglich)
                 └─ nginx -t  →  nginx -s reload   (ohne Unterbrechung)
 ```
 
-`scripts/certbot-deploy-hook.sh` reagiert nur auf das Zertifikat
-`projekthfh.tech` (änderbar über die Variable `CERT_NAME`). Hooks in
+`scripts/certbot-deploy-hook.sh` reagiert nur auf das Zertifikat mit dem
+Hostnamen dieses Servers: `PUBLIC_HOST` aus `/opt/pl2-hfh/.env`, also auf INT
+`projekthfh.tech` und auf PROD die HFH-Domain. Fehlt der Eintrag, gilt
+`projekthfh.tech`; die Variable `CERT_NAME` übersteuert beides. Hooks in
 `renewal-hooks/` laufen für **jedes** Zertifikat auf dem Server. Ohne diese
 Prüfung könnte ein anderes Zertifikat das richtige überschreiben.
 
@@ -352,10 +381,17 @@ sparsam nutzen.
    ```
 4. Prüf-Route testen (siehe oben).
 5. Zertifikat beantragen, **immer mit `--cert-name`**, sonst entsteht bei
-   geänderter Namensliste ein Duplikat wie `-0001`:
+   geänderter Namensliste ein Duplikat wie `-0001`. `--cert-name` muss der
+   Hostname des Servers sein (`PUBLIC_HOST` in der `.env`), denn daran erkennt
+   der Hook sein Zertifikat:
    ```bash
+   # INT
    certbot certonly --webroot -w /opt/pl2-hfh/nginx/acme-challenge \
      --cert-name projekthfh.tech -d projekthfh.tech -d www.projekthfh.tech \
+     --deploy-hook /etc/letsencrypt/renewal-hooks/deploy/pl2-hfh-nginx.sh
+   # PROD (HFH-Domain; -d www.… nur, wenn es den www-Namen im DNS gibt)
+   certbot certonly --webroot -w /opt/pl2-hfh/nginx/acme-challenge \
+     --cert-name <DOMAIN_PROD> -d <DOMAIN_PROD> \
      --deploy-hook /etc/letsencrypt/renewal-hooks/deploy/pl2-hfh-nginx.sh
    ```
    Der Hook ersetzt dabei das Übergangszertifikat und lädt nginx neu.
@@ -366,7 +402,7 @@ sparsam nutzen.
 | Punkt | Warum |
 |---|---|
 | **Port 80 muss offen bleiben** | Let's Encrypt prüft über HTTP. Firewall-Regel für 80 nicht schließen, auch wenn „alles HTTPS“ ist |
-| **Die Prüf-Route muss vor der HTTPS-Umleitung stehen** | Sie steht in `default.conf`, Block 1. Beim Umbau nicht entfernen |
+| **Die Prüf-Route muss vor der HTTPS-Umleitung stehen** | Sie steht in `templates/sites/default.conf.template`, Block 1. Beim Umbau nicht entfernen |
 | **DNS beider Namen muss auf den Server zeigen** | Das Zertifikat gilt für `projekthfh.tech` und `www.`. Zeigt ein Name woanders hin, scheitert die ganze Erneuerung |
 | **Ohne Reload kein neuer Ausweis** | certbot ändert nur Dateien. Der Deploy-Hook lädt nginx neu, ohne ihn läuft das alte Zertifikat ab |
 | **Mengengrenzen von Let's Encrypt** | z. B. höchstens 5 identische Zertifikate pro Woche. Zum Ausprobieren immer `--dry-run` nutzen |
@@ -432,7 +468,7 @@ Realm-Import.
   docker inspect pl2-hfh-nginx-1 \
     --format '{{range .Mounts}}{{.Source}} -> {{.Destination}}{{"\n"}}{{end}}'
   ```
-- Produktionswerte für nginx gehören ins Repo (`nginx/conf.d/default.conf`),
+- Produktionswerte für nginx gehören ins Repo (`nginx/templates/`, Hostname über `PUBLIC_HOST`),
   Geheimnisse in die `.env`.
 
 Lokal testen:

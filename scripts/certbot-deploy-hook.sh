@@ -18,6 +18,14 @@ APP_DIR="${APP_DIR:-/opt/pl2-hfh}"
 # /etc/letsencrypt/renewal-hooks/ laufen fuer JEDES Zertifikat auf dem Server -
 # ohne diese Pruefung wuerde z.B. ein Zertifikat ohne www.-Namen das richtige
 # ueberschreiben.
+#
+# Derselbe Hook laeuft auf INT und PROD: Ohne gesetztes CERT_NAME gilt der
+# Hostname dieses Servers aus $APP_DIR/.env (PUBLIC_HOST, vom Deploy aus
+# APP_PUBLIC_URL geschrieben), sonst wie bisher projekthfh.tech.
+# Voraussetzung: certbot --cert-name == Hostname (so in nginx/README.md).
+if [ -z "${CERT_NAME:-}" ] && [ -f "$APP_DIR/.env" ]; then
+  CERT_NAME="$(grep -E '^PUBLIC_HOST=' "$APP_DIR/.env" | tail -n1 | cut -d= -f2- || true)"
+fi
 CERT_NAME="${CERT_NAME:-projekthfh.tech}"
 # certbot setzt RENEWED_LINEAGE auf z.B. /etc/letsencrypt/live/projekthfh.tech
 LINEAGE="${RENEWED_LINEAGE:?nur als certbot --deploy-hook aufrufen (RENEWED_LINEAGE fehlt)}"

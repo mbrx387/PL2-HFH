@@ -2,7 +2,7 @@
 
 Ergaenzt das Login/SSO (app/auth.py) um Basis-Haertungsmassnahmen, die
 unabhaengig vom Auth-Konzept sinnvoll sind. TLS-Terminierung passiert
-bewusst NICHT hier, sondern im Nginx-Reverse-Proxy (nginx/conf.d/default.conf).
+bewusst NICHT hier, sondern im Nginx-Reverse-Proxy (nginx/templates/sites/default.conf.template).
 """
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request

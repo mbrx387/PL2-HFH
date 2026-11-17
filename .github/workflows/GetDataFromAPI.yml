@@ -101,13 +101,51 @@ jobs:
           path: db/temp/pflegestellen.csv
           if-no-files-found: error
           retention-days: 90
+      - name: Failure summary / Fehlerzusammenfassung
+        if: failure()
+        run: |
+          echo '## ETL failed / ETL fehlgeschlagen' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Existing app data is unchanged. Check the failed step, configuration and source availability before rerunning.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Bestehende App-Daten bleiben erhalten. Fehlerhaften Schritt, Konfiguration und Quelle vor erneutem Start pruefen.' >> "$GITHUB_STEP_SUMMARY"
+
+  # CSV in die Datenbank von INT und PROD laden. Gleiche Schritte, eigene
+  # Secrets: INT = SSH_HOST/SSH_USER/SSH_PRIVATE_KEY, PROD = *_PROD
+  # (Environment PROD). PROD ist aus, solange PUBLIC_HOST_PROD fehlt.
+  load:
+    name: load (${{ matrix.stage }})
+    needs: import
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - stage: INT
+            suffix: ""
+            enabled: true
+          - stage: PROD
+            suffix: _PROD
+            enabled: ${{ vars.PUBLIC_HOST_PROD != '' }}
+    environment: ${{ matrix.stage }}
+    steps:
+      - name: PROD aktiv? / PROD active?
+        if: ${{ !matrix.enabled }}
+        run: echo "::notice::${{ matrix.stage }} noch nicht eingerichtet (PUBLIC_HOST_PROD leer) - uebersprungen."
+      - name: Download db/temp handoff / db/temp-Uebergabe laden
+        if: ${{ matrix.enabled }}
+        uses: actions/download-artifact@v7
+        with:
+          name: pflegestellen-db-temp-${{ github.run_id }}-${{ github.run_attempt }}
+          path: db/temp
       - name: Prepare database server / Datenbankserver vorbereiten
-        if: github.ref == 'refs/heads/main'
+        if: ${{ matrix.enabled }}
         uses: appleboy/ssh-action@v1
         with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          host: ${{ secrets[format('SSH_HOST{0}', matrix.suffix)] }}
+          port: ${{ secrets[format('SSH_PORT{0}', matrix.suffix)] || 22 }}
+          username: ${{ secrets[format('SSH_USER{0}', matrix.suffix)] }}
+          key: ${{ secrets[format('SSH_PRIVATE_KEY{0}', matrix.suffix)] }}
           script: |
             set -eu
             cd /opt/pl2-hfh
@@ -115,22 +153,24 @@ jobs:
             docker compose config --services | grep -Fxq app-db
             mkdir -p db/temp
       - name: Copy CSV to database server / CSV zum Datenbankserver kopieren
-        if: github.ref == 'refs/heads/main'
+        if: ${{ matrix.enabled }}
         uses: appleboy/scp-action@v1
         with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          host: ${{ secrets[format('SSH_HOST{0}', matrix.suffix)] }}
+          port: ${{ secrets[format('SSH_PORT{0}', matrix.suffix)] || 22 }}
+          username: ${{ secrets[format('SSH_USER{0}', matrix.suffix)] }}
+          key: ${{ secrets[format('SSH_PRIVATE_KEY{0}', matrix.suffix)] }}
           source: db/temp/pflegestellen.csv
           target: /opt/pl2-hfh
           overwrite: true
       - name: Import CSV into PostgreSQL / CSV in PostgreSQL importieren
-        if: github.ref == 'refs/heads/main'
+        if: ${{ matrix.enabled }}
         uses: appleboy/ssh-action@v1
         with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          host: ${{ secrets[format('SSH_HOST{0}', matrix.suffix)] }}
+          port: ${{ secrets[format('SSH_PORT{0}', matrix.suffix)] || 22 }}
+          username: ${{ secrets[format('SSH_USER{0}', matrix.suffix)] }}
+          key: ${{ secrets[format('SSH_PRIVATE_KEY{0}', matrix.suffix)] }}
           script: |
             set -eu
             cd /opt/pl2-hfh
@@ -142,6 +182,5 @@ jobs:
       - name: Failure summary / Fehlerzusammenfassung
         if: failure()
         run: |
-          echo '## ETL failed / ETL fehlgeschlagen' >> "$GITHUB_STEP_SUMMARY"
-          echo 'Existing app data is unchanged. Check the failed step, configuration and source availability before rerunning.' >> "$GITHUB_STEP_SUMMARY"
-          echo 'Bestehende App-Daten bleiben erhalten. Fehlerhaften Schritt, Konfiguration und Quelle vor erneutem Start pruefen.' >> "$GITHUB_STEP_SUMMARY"
+          echo '## DB load failed (${{ matrix.stage }}) / DB-Import fehlgeschlagen' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Existing app data on this server is unchanged unless the SQL import started.' >> "$GITHUB_STEP_SUMMARY"

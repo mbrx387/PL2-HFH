@@ -1,14 +1,26 @@
 # Reverse Proxy + TLS-Terminierung vor der FastAPI-App.
 #
+# TEMPLATE: Der nginx-Container rendert diese Datei beim Start nach
+# /etc/nginx/sites/default.conf und ersetzt dabei NUR ${PUBLIC_HOST}
+# (NGINX_ENVSUBST_FILTER in docker-compose.yml). nginx-Variablen wie $host
+# bleiben unveraendert. PUBLIC_HOST kommt aus der Server-.env (der Deploy
+# leitet ihn aus APP_PUBLIC_URL ab), lokal ist er "localhost".
+#   INT:  projekthfh.tech        PROD: die HFH-Domain
+#
 # Aufbau:
 #   1. Port 80, bekannte Hosts: certbot-Challenge + Umleitung auf HTTPS
 #   2. Port 80/443, unbekannte Hosts (Scanner, Aufruf per IP): abweisen
-#   3. Port 443, www.projekthfh.tech: Umleitung auf projekthfh.tech
-#   4. Port 443, projekthfh.tech + localhost: die eigentliche Anwendung
+#   3. Port 443, www.${PUBLIC_HOST}: Umleitung auf ${PUBLIC_HOST}
+#   4. Port 443, ${PUBLIC_HOST} + localhost: die eigentliche Anwendung
 #
-# Neuer Hostname (Domainwechsel): server_name in Block 1, 3 und 4 sowie die
-# map $canonical_host in nginx.conf anpassen. "localhost" muss bleiben - der
-# Deploy-Healthcheck und der Container-Healthcheck rufen https://localhost auf.
+# "localhost" muss bleiben - der Deploy-Healthcheck und der
+# Container-Healthcheck rufen https://localhost auf.
+
+# Kanonischer Hostname: www.${PUBLIC_HOST} -> ${PUBLIC_HOST}.
+map $host $canonical_host {
+    www.${PUBLIC_HOST} ${PUBLIC_HOST};
+    default             $host;
+}
 
 # --- TLS-Einstellungen (http-Ebene, gelten fuer alle 443-Server) ----------
 # Server: Let's-Encrypt-Zertifikat, von certbot nach nginx/certs/ kopiert
@@ -27,7 +39,7 @@ ssl_session_tickets off;
 # --- 1. HTTP (Port 80), bekannte Hosts --------------------------------------
 server {
     listen 80;
-    server_name projekthfh.tech www.projekthfh.tech localhost;
+    server_name ${PUBLIC_HOST} www.${PUBLIC_HOST} localhost;
 
     include /etc/nginx/conf.d/security-headers.inc;
 
@@ -63,18 +75,18 @@ server {
 server {
     listen 443 ssl;
     http2 on;
-    server_name www.projekthfh.tech;
+    server_name www.${PUBLIC_HOST};
 
     include /etc/nginx/conf.d/security-headers.inc;
 
-    return 301 https://projekthfh.tech$request_uri;
+    return 301 https://${PUBLIC_HOST}$request_uri;
 }
 
 # --- 4. HTTPS, Anwendung -----------------------------------------------------
 server {
     listen 443 ssl;
     http2 on;
-    server_name projekthfh.tech localhost;
+    server_name ${PUBLIC_HOST} localhost;
 
     include /etc/nginx/conf.d/security-headers.inc;
 

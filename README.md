@@ -54,18 +54,21 @@ PL2-HFH/
 ├── keycloak/configure.sh         # dieselben Einstellungen für einen bestehenden Realm (kcadm.sh)
 ├── nginx/
 │   ├── nginx.conf
-│   ├── conf.d/default.conf       # TLS-Terminierung, Reverse Proxy, Rate-Limit, /idp/-Route (Keycloak)
+│   ├── templates/sites/default.conf.template  # TLS, Reverse Proxy, Rate-Limit, /idp/ - Hostname per ${PUBLIC_HOST}
 │   ├── conf.d/security-headers.inc  # Basis-Sicherheitsheader (per include)
 │   ├── acme-challenge/           # Webroot fuer certbot (Inhalt nicht im Git)
 │   └── README.md                 # nginx + certbot einfach erklaert
 ├── scripts/generate_dev_cert.sh  # Self-signed Zertifikat für lokale Tests
 ├── scripts/certbot-deploy-hook.sh # certbot: Zertifikat kopieren + nginx neu laden
 ├── tests/                        # Pytest (API, Auth-Middleware, Fail-Fast-Checks)
-├── .github/workflows/deploy.yml  # CI: Lint + Tests -> Image-Build -> Deploy per SSH
+├── .github/workflows/deploy.yml  # CI: Lint + Tests -> Image-Build -> INT (jeder PR) -> PROD (Merge)
+├── .github/workflows/deploy-server.yml  # Deploy-Schritte per SSH, gemeinsam für INT und PROD
+├── .github/workflows/uptime.yml  # tägliche Prüfung von außen (INT + PROD)
 ├── docker-compose.yml
 ├── pyproject.toml                # ruff/pytest-Konfiguration
 ├── requirements-dev.txt
 ├── .env.example
+├── docs/BETRIEB.md               # INT/PROD: Ablauf, Einrichtung HFH-Server, Runbook
 └── docs/ROADMAP.md               # Umgesetzter Stand / nächste Schritte
 ```
 
@@ -267,6 +270,12 @@ API-Dokumentation (Swagger UI) liegt automatisch unter `/api/docs` (ebenfalls
 login-pflichtig, sobald `AUTH_ENABLED=true`).
 
 ## 8. Server-Inbetriebnahme
+
+Es gibt zwei Server: **INT** (`projekthfh.tech`, bekommt jeden PR) und
+**PROD** (HFH-Server, bekommt nur Merges nach `main`, erst nachdem INT mit
+demselben Commit grün ist). Ablauf, Namen der Secrets und die Einrichtung des
+HFH-Servers: [`docs/BETRIEB.md`](docs/BETRIEB.md). Die Schritte unten gelten
+für **beide** Server, jeweils mit eigener `.env`.
 
 Deploys laufen automatisch per GitHub Actions (`.github/workflows/deploy.yml`).
 Einmalig auf dem Server nötig, weil das Keycloak-Client-Secret erst nach dem

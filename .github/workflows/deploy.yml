@@ -1,9 +1,21 @@
 name: Build & Deploy
 
+# Ablauf (Details: docs/BETRIEB.md):
+#   Pull Request : test -> Image sha-<PR-Commit> -> deploy-int (INT-Server)
+#   Merge (main) : test -> Image sha-<main-Commit> -> deploy-int -> deploy-prod
+#   Manuell      : "Run workflow" mit Commit von main -> nur deploy-prod
+#                  (Rollback / erneuter Deploy, Image muss schon existieren)
+# Merge-Sperre: Ruleset auf main verlangt den Check "deploy-int / deploy".
 on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: Voller Commit-SHA von main, der auf PROD deployt wird
+        required: true
+        type: string
 
 env:
   REGISTRY: ghcr.io
@@ -16,6 +28,7 @@ jobs:
   # (Secrets, Client-Secret, IMAGE_TAG) ueberschreiben bzw. loeschen und das
   # Deployment zerstoeren. Erlaubt ist nur die Vorlage .env.example.
   env-guard:
+    if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -74,26 +87,43 @@ jobs:
 
       # nginx-Konfiguration mit genau dem Image pruefen, das auch der Server
       # nutzt - ein Tippfehler faellt so im PR auf, nicht erst beim Reload.
+      # Das Template wird wie auf dem Server vom Image-Entrypoint gerendert,
+      # einmal mit dem INT-Hostnamen und einmal mit einem PROD-artigen Namen.
       - name: nginx-Konfiguration pruefen (nginx -t)
         run: |
           ./scripts/generate_dev_cert.sh
           image="$(grep -E '^\s+image: nginx:' docker-compose.yml | awk '{print $2}')"
-          docker run --rm \
-            -v "$PWD/nginx/nginx.conf:/etc/nginx/nginx.conf:ro" \
-            -v "$PWD/nginx/conf.d:/etc/nginx/conf.d:ro" \
-            -v "$PWD/nginx/certs:/etc/nginx/certs:ro" \
-            "$image" nginx -t
+          for host in projekthfh.tech prod.example.de; do
+            echo "== PUBLIC_HOST=$host"
+            docker run --rm \
+              -e PUBLIC_HOST="$host" \
+              -e 'NGINX_ENVSUBST_FILTER=^PUBLIC_HOST$' \
+              -e NGINX_ENVSUBST_OUTPUT_DIR=/etc/nginx \
+              -v "$PWD/nginx/nginx.conf:/etc/nginx/nginx.conf:ro" \
+              -v "$PWD/nginx/conf.d:/etc/nginx/conf.d:ro" \
+              -v "$PWD/nginx/templates:/etc/nginx/templates:ro" \
+              -v "$PWD/nginx/certs:/etc/nginx/certs:ro" \
+              "$image" sh -c "/docker-entrypoint.sh nginx -t && grep -q 'server_name $host localhost;' /etc/nginx/sites/default.conf"
+          done
 
   build-and-push:
-    # Nur auf main bauen/deployen; PRs laufen ausschliesslich durch "test".
-    if: github.event_name == 'push'
+    # main und PRs aus diesem Repo. PRs aus Forks bekommen keine Secrets und
+    # duerfen nicht auf INT laufen - sie bleiben bei "test".
+    if: >-
+      github.event_name == 'push' ||
+      (github.event_name == 'pull_request' &&
+       github.event.pull_request.head.repo.full_name == github.repository)
     needs: test
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
     steps:
+      # Bei PRs den PR-Commit selbst bauen (nicht den Merge-Commit), damit
+      # Image-Tag, Server-Checkout und getesteter Stand zusammenpassen.
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -108,10 +138,13 @@ jobs:
       - name: Extract image metadata
         id: meta
         uses: docker/metadata-action@v6
+        env:
+          # type=sha bei PRs aus dem PR-Commit statt aus dem Merge-Commit.
+          DOCKER_METADATA_PR_HEAD_SHA: "true"
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=raw,value=latest
+            type=raw,value=latest,enable={{is_default_branch}}
             type=sha
 
       - name: Build & push image
@@ -125,122 +158,44 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  deploy:
+  # INT = jetziger Server (projekthfh.tech). Secrets SSH_HOST, SSH_USER,
+  # SSH_PRIVATE_KEY (unveraendert). Bei PRs der PR-Commit, auf main der Merge.
+  deploy-int:
     needs: build-and-push
-    runs-on: ubuntu-latest
+    concurrency:
+      group: deploy-int
+      cancel-in-progress: false
     permissions:
       packages: read
-    steps:
-      - name: Deploy over SSH
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          script: |
-            set -e
-            mkdir -p /opt/pl2-hfh
-            cd /opt/pl2-hfh
-            if [ ! -d .git ]; then
-              # Ordner existiert ggf. schon (z.B. wegen .env) - "clone" in
-              # ein bestehendes, nicht-leeres Verzeichnis scheitert, daher
-              # per init+fetch+checkout statt "git clone" initialisieren.
-              # checkout -f fasst nur GIT-TRACKED Dateien an, .env (ist
-              # .gitignore't) bleibt unberührt.
-              git init -b main
-              git remote add origin https://github.com/${{ github.repository }}.git
-            fi
-            git fetch origin main
-            # Zweite Sicherung direkt auf dem Server (falls env-guard
-            # umgangen wurde): enthaelt der Ziel-Commit eine .env, wuerde
-            # "reset --hard" die Server-.env ueberschreiben - VORHER abbrechen.
-            bad="$(git ls-tree -r --name-only origin/main \
-              | grep -E '(^|/)(\.env(\..+)?|[^/]+\.env)$' | grep -vE '(^|/)\.env\.example$' || true)"
-            if [ -n "$bad" ]; then
-              echo "::error::origin/main enthaelt Umgebungsdateien - Deploy abgebrochen:"
-              echo "$bad"
-              exit 1
-            fi
-            env_sum_before="$(sha256sum .env 2>/dev/null || true)"
-            git checkout -f main
-            git reset --hard origin/main
-            if [ "$(sha256sum .env 2>/dev/null || true)" != "$env_sum_before" ]; then
-              echo "::error::/opt/pl2-hfh/.env wurde beim Checkout veraendert - Deploy abgebrochen."
-              exit 1
-            fi
-            # Pflichtvariablen der Server-.env pruefen, BEVOR docker compose
-            # mit einer kryptischen Meldung abbricht. Platzhalter zaehlen als
-            # fehlend. Zertifikate pruefen, weil nginx ohne sie nicht startet.
-            if [ ! -f .env ]; then
-              echo "::error::/opt/pl2-hfh/.env fehlt - aus .env.example anlegen."
-              exit 1
-            fi
-            missing=""
-            for key in SECRET_KEY APP_PUBLIC_URL ALLOWED_ORIGINS \
-                       OIDC_ISSUER OIDC_CLIENT_ID OIDC_CLIENT_SECRET OIDC_ISSUER_INTERNAL \
-                       KEYCLOAK_ADMIN_PASSWORD KEYCLOAK_DB_PASSWORD APP_DB_PASSWORD KC_HOSTNAME; do
-              value="$(grep -E "^${key}=" .env | tail -n1 | cut -d= -f2-)"
-              case "$value" in
-                ""|change-me|*example.org*) missing="$missing $key" ;;
-              esac
-            done
-            if [ -n "$missing" ]; then
-              echo "::error::In /opt/pl2-hfh/.env fehlen oder sind Platzhalter:$missing"
-              echo "Siehe .env.example und README.md, Abschnitt 8."
-              exit 1
-            fi
-            for cert in nginx/certs/fullchain.pem nginx/certs/privkey.pem; do
-              if [ ! -s "$cert" ]; then
-                echo "::error::$cert fehlt - nginx startet ohne TLS-Zertifikat nicht."
-                exit 1
-              fi
-            done
-            # Exakten Build dieses Commits deployen (statt "latest"); der Tag
-            # bleibt in .env stehen, damit spaetere manuelle `compose up`
-            # dieselbe Version nutzen. Rollback = alten Tag eintragen.
-            IMAGE_TAG="sha-$(echo '${{ github.sha }}' | cut -c1-7)"
-            sed -i '/^IMAGE_TAG=/d' .env
-            echo "IMAGE_TAG=${IMAGE_TAG}" >> .env
-            # Compose-Konfiguration validieren (faengt z.B. Syntaxfehler ab).
-            docker compose --profile sso config --quiet
-            # Warnung, wenn eine nicht versionierte Datei (z.B.
-            # docker-compose.override.yml) die nginx-Konfiguration aus dem Repo
-            # ueberdeckt - Aenderungen an nginx/conf.d kaemen sonst nie live an.
-            conf_src="$(docker compose --profile sso config --format json \
-              | python3 -c 'import json,sys; v=json.load(sys.stdin)["services"]["nginx"].get("volumes",[]); print(next((x.get("source","") for x in v if x.get("target")=="/etc/nginx/conf.d"),""))')"
-            if [ "$conf_src" != "$PWD/nginx/conf.d" ]; then
-              echo "::warning::nginx liest /etc/nginx/conf.d aus '$conf_src' statt aus nginx/conf.d (Override-Datei?) - siehe nginx/README.md, Abschnitt 8."
-            fi
-            # Nur nötig, falls das GHCR-Package NICHT public ist:
-            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
-            docker compose --profile sso pull
-            docker compose --profile sso up -d
-            # nginx liest geaenderte Dateien aus nginx/ (Konfiguration,
-            # Zertifikate) nur beim Start oder Reload. "up -d" erstellt den
-            # Container nur neu, wenn sich docker-compose.yml aendert - daher
-            # immer pruefen und neu laden. Schlaegt "nginx -t" fehl, bricht der
-            # Deploy ab und die bisherige Konfiguration laeuft weiter.
-            docker compose exec -T nginx nginx -t
-            docker compose exec -T nginx nginx -s reload
-            docker image prune -f
+    uses: ./.github/workflows/deploy-server.yml
+    with:
+      environment: INT
+      suffix: ""
+      sha: ${{ github.event.pull_request.head.sha || github.sha }}
+      fetch_ref: ${{ github.event_name == 'pull_request' && format('refs/pull/{0}/head', github.event.pull_request.number) || 'main' }}
+    secrets: inherit
 
-      - name: Health check
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          script: |
-            for i in $(seq 1 12); do
-              if curl -fsS -k https://localhost/healthz > /dev/null; then
-                echo "Healthy."
-                exit 0
-              fi
-              echo "Not ready yet, retry $i/12..."
-              sleep 5
-            done
-            echo "Health check failed after 60s - dumping status/logs:"
-            cd /opt/pl2-hfh
-            docker compose ps
-            docker compose logs --tail=50
-            exit 1
+  # PROD = HFH-Server. Secrets SSH_HOST_PROD, SSH_USER_PROD,
+  # SSH_PRIVATE_KEY_PROD im Environment PROD (nur Branch main erlaubt).
+  # Nach einem Merge erst, wenn INT mit demselben Commit gruen ist.
+  # Eingeschaltet wird PROD durch die Repo-Variable PUBLIC_HOST_PROD - solange
+  # sie fehlt (HFH-Server noch nicht eingerichtet), wird der Job uebersprungen.
+  deploy-prod:
+    needs: deploy-int
+    if: >-
+      !cancelled() && vars.PUBLIC_HOST_PROD != '' && (
+        (github.event_name == 'push' && needs.deploy-int.result == 'success') ||
+        github.event_name == 'workflow_dispatch')
+    concurrency:
+      group: deploy-prod
+      cancel-in-progress: false
+    permissions:
+      packages: read
+    uses: ./.github/workflows/deploy-server.yml
+    with:
+      environment: PROD
+      suffix: _PROD
+      sha: ${{ inputs.sha || github.sha }}
+      fetch_ref: main
+      require_on_main: true
+    secrets: inherit
