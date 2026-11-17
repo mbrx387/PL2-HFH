@@ -445,8 +445,13 @@
                     </form>
                     <p id="user-message" class="form-message" role="status" aria-live="polite"></p>
                 </section>
-                <section class="directory-panel">
+             <section class="directory-panel">
                     <div class="results-header"><h3>Benutzerkonten</h3><button type="button" class="secondary-button" id="users-refresh">Aktualisieren</button></div>
+                    <!-- NEU AP6: Live-Suche nach Benutzername oder E-Mail für admin und editor -->
+                    <div class="form-field">
+                        <label for="users-search">Benutzer suchen</label>
+                        <input type="search" id="users-search" placeholder="Benutzername oder E-Mail eingeben ..." autocomplete="off">
+                    </div>
                     <p id="users-list-message" role="status"></p>
                     <div class="table-wrapper"><table class="history-table"><thead><tr><th>Benutzername</th><th>E-Mail</th><th>Status</th><th>Aktion</th></tr></thead><tbody id="users-table-body"></tbody></table></div>
                 </section>
