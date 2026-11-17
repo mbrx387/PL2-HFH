@@ -655,7 +655,7 @@ function bindEvents() {
     const usersRefresh = $("users-refresh");
     if (userForm) userForm.addEventListener("submit", createUser);
     if (usersRefresh) usersRefresh.addEventListener("click", loadUsers);
- 
+  }
   document.querySelectorAll(".nav-link").forEach((link) => {
     link.addEventListener("click", (event) => {
       event.preventDefault();
@@ -731,7 +731,5 @@ if (initialView === "datenpflege" && canEdit) openCenterForm(null);
 else showView(initialView);
 loadBundeslaender();
 loadCenters();
-loadDashboardCount();
-updateSelectionUi();
 loadDashboardCount();
 updateSelectionUi();
