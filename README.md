@@ -61,10 +61,13 @@ PL2-HFH/
 ├── scripts/generate_dev_cert.sh  # Self-signed Zertifikat für lokale Tests
 ├── scripts/certbot-deploy-hook.sh # certbot: Zertifikat kopieren + nginx neu laden
 ├── tests/                        # Pytest (API, Auth-Middleware, Fail-Fast-Checks)
+├── e2e/                          # Playwright-E2E-Tests (Browser), eigene Test-DB per Docker
 ├── .github/workflows/deploy.yml  # CI: Lint + Tests -> Image-Build -> Deploy per SSH
+├── .github/workflows/playwright.yml # CI: E2E-Tests mit Playwright
 ├── docker-compose.yml
 ├── pyproject.toml                # ruff/pytest-Konfiguration
 ├── requirements-dev.txt
+├── requirements-e2e.txt          # zusätzlich für E2E: playwright, pytest-playwright, pytest-html
 ├── .env.example
 └── docs/ROADMAP.md               # Umgesetzter Stand / nächste Schritte
 ```
@@ -262,6 +265,33 @@ AUTH_ENABLED=false uvicorn app.main:app --reload
 ```bash
 ruff check . && pytest
 ```
+
+**E2E-Tests mit Playwright** (bedienen die echte Oberfläche in Chromium; laufen
+in CI über `.github/workflows/playwright.yml`):
+
+```bash
+pip install -r app/requirements.txt -r requirements-e2e.txt
+python -m playwright install chromium                     # einmalig
+docker compose -f e2e/docker-compose.e2e.yml up -d --wait  # isolierte Test-DB
+pytest e2e                                                # startet die App selbst (Port 8800)
+pytest e2e --headed --slowmo 300                          # zum Zuschauen
+docker compose -f e2e/docker-compose.e2e.yml down -v
+```
+
+- **Nie gegen echte Daten:** eigene Compose-Datei/-Projekt (`pl2-hfh-e2e`),
+  Datenbank `pflegedb_e2e` auf `127.0.0.1:55432` ohne persistentes Volume, keine
+  `.env`. Zeigt `E2E_DATABASE_URL` nicht auf eine lokale `*_e2e`-Datenbank oder ist
+  `ENVIRONMENT=production` gesetzt, bricht der Lauf vor dem ersten Test ab.
+- **Reproduzierbar:** Vor jedem Test wird die Datenbank geleert und
+  `e2e/data/centers.csv` über das echte `db/import_centers.sql` importiert.
+- **Login:** Die Test-App läuft aktuell mit `AUTH_ENABLED=false`
+  (`e2e/run_app.py`); Tests mit Keycloak-Login (Marker `auth`) folgen in Phase 2.
+- **Fehleranalyse:** Bei fehlgeschlagenen Tests liegen Screenshot, Video und Trace
+  unter `test-results/<test>/` (`python -m playwright show-trace …/trace.zip`), der
+  HTML-Report unter `playwright-report/index.html`, das App-Log unter
+  `build/e2e-app.log`. In CI werden sie als Artifact hochgeladen.
+- `localhost` bewusst vermeiden und `127.0.0.1` verwenden: unter Windows/Docker Desktop
+  hängt der IPv6-Versuch (`::1`) sonst ohne Timeout.
 
 API-Dokumentation (Swagger UI) liegt automatisch unter `/api/docs` (ebenfalls
 login-pflichtig, sobald `AUTH_ENABLED=true`).
