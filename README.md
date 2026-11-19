@@ -356,6 +356,14 @@ Was die Realm-Datei und das Skript setzen:
 | Einmalcode (OTP) für neue Konten | Pflicht beim ersten Login | nein | ja |
 | Login-Schutz im Realm `master` | wie oben | nein | ja |
 
+### Datenbank-Backups
+
+Regelmäßige Dumps für `pflegedb` und `keycloak` erstellt
+`scripts/backup_db.sh` als PostgreSQL-Custom-Format mit `pg_dump -Fc`. Das
+Skript rotiert Dateien nach 14 Tagen und prüft jeden Dump mit `pg_restore --list`.
+Cron-Einrichtung, Restore- und Testvorgänge stehen in
+[`keycloak/README.md`](keycloak/README.md), Abschnitt 11.
+
 Immer manuell (stehen bewusst nicht im Repository): Secrets in der `.env`,
 Client-Secret aus der Konsole übernehmen (Schritt 5), `frontendUrl` des
 `master`-Realms (Schritt 4), persönliche Admin-Konten, echte Benutzer und ihre

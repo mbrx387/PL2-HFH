@@ -64,7 +64,9 @@ Betriebsanleitung (Server-Inbetriebnahme, Keycloak): siehe
 - [ ] Keycloak-Härtung auf dem Server anwenden: `./keycloak/configure.sh`
       (Brute-Force-Schutz, Passwort-Richtlinie, Audit, OTP, Gruppen; im Repo
       vorbereitet). „Passwort vergessen“ erst mit E-Mail-Versand wieder einschalten
-- [ ] Backup der Keycloak-Datenbank
+- [x] Regelmäßige Backups beider Datenbanken (`scripts/backup_db.sh`,
+      Custom-Format `pg_dump -Fc`, 14 Tage Rotation, Cron-Beispiel und
+      dokumentierte/praxiserprobte Restore-Prozedur)
 
 ### Backend
 - [ ] Login-Prüfung von Middleware auf FastAPI-Dependency umstellen
