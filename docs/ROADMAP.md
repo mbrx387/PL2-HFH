@@ -80,7 +80,9 @@ Betriebsanleitung (Server-Inbetriebnahme, Keycloak): siehe
 ### Betrieb / CI
 - [ ] Automatischer Rollback bei fehlgeschlagenem Health-Check
 - [ ] GitHub Actions aktualisieren (Node-20-Deprecation) und auf Commit-SHAs pinnen
-- [ ] Strukturiertes Logging und Uptime-Monitoring
+- [x] Uptime Kuma und Netdata als optionales Docker-Compose-Profil `monitoring`,
+      nur intern und per nginx-TLS-Proxy mit Basic Auth erreichbar
+- [ ] Externen Alarmkanal (E-Mail/Telegram) in Uptime Kuma konfigurieren
 
 ### Später / optional
 - [ ] Automatischer Daten-Sync aus einer offiziellen Quelle statt CSV-Pflege
