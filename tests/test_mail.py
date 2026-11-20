@@ -315,10 +315,21 @@ def test_mail_endpoints_require_login(make_app):
 def test_logged_in_user_is_recorded_as_sender(make_app):
     app = make_app(**OIDC_ENV)
     with TestClient(app) as client:
-        client.cookies.set("session", _session_cookie("x" * 40, {"sub": "123", "email": "adrian@hfh.test"}))
+        user = {"sub": "123", "email": "adrian@hfh.test", "roles": ["reader"]}
+        client.cookies.set("session", _session_cookie("x" * 40, user))
         token = _prepare(client, center_ids=[10])["batches"][0]["handoff_token"]
         entry = _handoff(client, token).json()["history"]
         assert entry["created_by"] == "adrian@hfh.test"
+
+
+def test_mail_endpoints_require_app_role(make_app):
+    """GEÄNDERT AP6: Angemeldet, aber ohne Rolle reader/editor/admin -> 403."""
+    app = make_app(**OIDC_ENV)
+    with TestClient(app) as client:
+        client.cookies.set("session", _session_cookie("x" * 40, {"sub": "1", "roles": []}))
+        assert client.post("/api/mail/prepare", json={"center_ids": [10]}).status_code == 403
+        assert client.post("/api/mail/handoff", json={"handoff_token": "x" * 40}).status_code == 403
+        assert client.get("/api/mail-history").status_code == 403
 
 
 # --- Datenbankschema -------------------------------------------------------
@@ -353,3 +364,16 @@ def test_ensure_table_is_idempotent_and_detects_outdated_schema(client):
 def test_umlauts_in_subject_survive_the_link():
     url = build_mailto_url(["a@example.org"], "Ä Ö Ü ß", "")
     assert unquote(url.split("subject=")[1]) == "Ä Ö Ü ß"
+
+
+def test_filter_selection_skips_inactive_centers(client):
+    """GEÄNDERT AP6: Deaktivierte Einrichtungen werden nicht angeschrieben."""
+    _add_centers([
+        dict(id=3001, name="Aktiv", plz="99084", ort="Erfurt", bundesland="TH",
+             email="aktiv@example.org", aktiv=True),
+        dict(id=3002, name="Deaktiviert", plz="99084", ort="Erfurt", bundesland="TH",
+             email="inaktiv@example.org", aktiv=False),
+    ])
+    data = _prepare(client, filters={"bundesland": "TH"})
+    assert data["selected_centers"] == 1
+    assert data["recipient_count"] == 1

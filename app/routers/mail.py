@@ -24,9 +24,9 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 import app.config as config
-# Rollenprüfung aus der bestehenden Keycloak-Anbindung.
-from app.auth import require_permission
 
+# GEÄNDERT AP6: Rollenprüfung aus der bestehenden Keycloak-Anbindung.
+from app.auth import require_permission
 from app.database import get_db
 from app.mail_models import HANDOFF_STATUS, MailHistory
 from app.mail_schemas import (
@@ -58,8 +58,7 @@ _TOKEN_SALT = "ap5-mail-handoff-v2"
 
 def _serializer() -> URLSafeTimedSerializer:
     # config.get_settings() erst zur Laufzeit aufrufen (Tests laden config neu).
-    return URLSafeTimedSerializer(config.get_settings().secret_key, salt=_TOKEN_SALT,
-                                 )
+    return URLSafeTimedSerializer(config.get_settings().secret_key, salt=_TOKEN_SALT)
 
 
 def _current_user(request: Request) -> str | None:
@@ -74,12 +73,13 @@ def _is_text_list(value: object) -> bool:
     return isinstance(value, list) and all(isinstance(item, str) for item in value)
 
 
-@router.post("/mail/prepare", response_model=MailPrepareResponse,
-            )
-def prepare_mail(payload: MailPrepareRequest, db: Session = Depends(get_db),
-                 
-   # Reader, Editor und Admin dürfen E-Mails vorbereiten.
-    _: dict = Depends(require_permission("read_centers")),):
+@router.post("/mail/prepare", response_model=MailPrepareResponse)
+def prepare_mail(
+    payload: MailPrepareRequest,
+    db: Session = Depends(get_db),
+    # GEÄNDERT AP6: Reader, Editor und Admin dürfen E-Mails vorbereiten.
+    _: dict = Depends(require_permission("read_centers")),
+):
     """Vorschau: ermittelt Empfaenger und Gruppen, schreibt noch KEINE Historie."""
     try:
         if payload.center_ids is not None:
@@ -150,9 +150,11 @@ def prepare_mail(payload: MailPrepareRequest, db: Session = Depends(get_db),
 
 
 @router.post("/mail/handoff", response_model=MailHandoffResponse)
-def handoff_mail(payload: MailHandoffRequest, request: Request, db: Session = Depends(get_db),
-
-    # Reader, Editor und Admin dürfen die Übergabe auslösen.
+def handoff_mail(
+    payload: MailHandoffRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    # GEÄNDERT AP6: Reader, Editor und Admin dürfen die Übergabe auslösen.
     _: dict = Depends(require_permission("read_centers")),
 ):
     """Nimmt nur ein von /prepare signiertes Token an, protokolliert und liefert den Link."""
@@ -229,11 +231,9 @@ def list_mail_history(
     month: int | None = Query(default=None, ge=1, le=12, description="Monat 1-12, nur mit year"),
     search: str | None = Query(default=None, max_length=200, description="Suche in Betreff/Nachricht"),
     campaign_id: str | None = Query(default=None, max_length=32),
-),
- # Reader, Editor und Admin dürfen die Historie einsehen.
+    # GEÄNDERT AP6: Reader, Editor und Admin dürfen die Historie einsehen.
     _: dict = Depends(require_permission("read_centers")),
 ):
-
     """Historie, neueste zuerst. Fuer das AP6-Dashboard (Filter Jahr/Monat/Suche)."""
     stmt = select(MailHistory)
     if month is not None and year is None:
