@@ -396,13 +396,9 @@
                 </div>
 
                 <section class="directory-panel">
-                    <div class="notice">
-                        <strong>Noch nicht verfügbar</strong>
-                        <p>
-                            Die Versandhistorie wird mit dem E-Mail-Modul (Issue #20, PR #47)
-                            angebunden. Bis dahin werden Versandvorgänge nicht gespeichert.
-                        </p>
-                    </div>
+                    <!-- GEÄNDERT AP6: Historie aus AP5-PR#47 statt statischem Platzhalter. -->
+                     <p id="mail-history-message" class="form-message" role="status" aria-live="polite">Historie wird geladen ...</p>
+
 
                     <div class="table-wrapper">
                         <table class="history-table">
@@ -414,11 +410,8 @@
                                     <th scope="col">Status</th>
                                 </tr>
                             </thead>
-                            <tbody>
-                                <tr>
-                                    <td colspan="4" class="empty-cell">Keine Einträge.</td>
-                                </tr>
-                            </tbody>
+                            <!-- NEU AP6: Daten aus GET /api/mail-history. -->
+                            <tbody id="mail-history-body"></tbody>
                         </table>
                     </div>
                 </section>
@@ -496,8 +489,9 @@
                     <article class="overview-card">
                         <span class="overview-icon" aria-hidden="true">◷</span>
                         <p>Versandhistorie</p>
-                        <strong>–</strong>
-                        <span class="overview-description">Folgt mit dem E-Mail-Modul</span>
+                       <!-- NEU AP6: AP5-Historienanzahl nach dem Laden. -->
+                        <strong id="dashboard-history-count">–</strong>
+                        <span class="overview-description">Dokumentierte Mailprogramm-Uebergaben</span>
                     </article>
                 </div>
 
