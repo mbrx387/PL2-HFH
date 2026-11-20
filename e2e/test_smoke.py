@@ -1,7 +1,7 @@
 """Smoke-Test: Anwendung startet, Startseite und Navigation funktionieren."""
 import re
 
-from conftest import SEED_COUNT
+from db_seed import SEED_COUNT
 from playwright.sync_api import Page, expect
 
 

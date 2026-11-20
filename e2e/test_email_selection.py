@@ -5,13 +5,12 @@ lokale Mailprogramm, headless nicht sinnvoll pruefbar).
 """
 import re
 
-from conftest import SEED_COUNT
+from helpers import open_directory
 from playwright.sync_api import Page, expect
 
 
 def test_selected_centers_become_email_recipients(page: Page):
-    page.goto("/#einrichtungen")
-    expect(page.locator(".directory-card")).to_have_count(SEED_COUNT)
+    open_directory(page)
 
     # Ohne E-Mail-Adresse nicht auswaehlbar.
     expect(page.get_by_role("checkbox", name="E2E Seniorenberatung Chemnitz auswählen")).to_be_disabled()
@@ -41,8 +40,7 @@ def test_selected_centers_become_email_recipients(page: Page):
 
 
 def test_clearing_selection_hides_bulk_actions(page: Page):
-    page.goto("/#einrichtungen")
-    expect(page.locator(".directory-card")).to_have_count(SEED_COUNT)
+    open_directory(page)
 
     page.get_by_role("button", name="Alle auf dieser Seite auswählen").click()
     # 5 von 6 Seed-Eintraegen haben eine E-Mail-Adresse.

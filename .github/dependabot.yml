@@ -72,8 +72,11 @@ updates:
       prefix: "deps(docker)"
 
   # --- Docker Compose: nginx, keycloak, postgres ---
+  # /e2e: e2e/docker-compose.e2e.yml (Test-DB). Dependabot liest nur Dateien
+  # im angegebenen Ordner, nicht rekursiv. Gleichstand mit der Produktion
+  # prueft zusaetzlich tests/test_e2e_compose.py.
   - package-ecosystem: docker-compose
-    directory: /
+    directories: ["/", "/e2e"]
     schedule:
       interval: weekly
       day: monday

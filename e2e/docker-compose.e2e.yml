@@ -13,7 +13,8 @@ name: pl2-hfh-e2e
 
 services:
   app-db:
-    # Gleiches Image wie im Produktivbetrieb (../docker-compose.yml).
+    # Gleiches Image wie im Produktivbetrieb (../docker-compose.yml),
+    # geprueft durch tests/test_e2e_compose.py.
     image: postgres:16-alpine
     environment:
       POSTGRES_DB: pflegedb_e2e

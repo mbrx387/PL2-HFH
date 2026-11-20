@@ -36,7 +36,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
-      E2E_BASE_URL: http://127.0.0.1:8800
       PYTHONUNBUFFERED: "1"
     steps:
       - uses: actions/checkout@v7
@@ -55,21 +54,8 @@ jobs:
       - name: Start test database / Test-Datenbank starten
         run: docker compose -f e2e/docker-compose.e2e.yml up -d --wait
 
-      - name: Start app / App starten
-        run: |
-          mkdir -p build
-          nohup python e2e/run_app.py > build/e2e-app.log 2>&1 &
-
-      - name: Wait for app / Auf App warten
-        run: |
-          for i in $(seq 1 30); do
-            if curl -fsS "$E2E_BASE_URL/healthz"; then exit 0; fi
-            sleep 2
-          done
-          echo "::error::App unter $E2E_BASE_URL/healthz nach 60 s nicht erreichbar"
-          cat build/e2e-app.log
-          exit 1
-
+      # Startet die App selbst (e2e/conftest.py: run_app.py, Warten auf
+      # /healthz, Log nach build/e2e-app.log) - derselbe Weg wie lokal.
       - name: Run Playwright tests / Tests ausfuehren
         run: pytest e2e
 

@@ -7,14 +7,30 @@ nebenbei mitgetestet wird. Das Skript liest die CSV per psql-Metabefehl
 serverseitiges ``COPY ... FROM STDIN`` ersetzt und die CSV ueber psycopg
 gestreamt. Alles andere (BEGIN, Temp-Tabelle, Upsert, Services, COMMIT) laeuft
 unveraendert.
+
+Tests beziehen sich auf den Seed: die Gesamtzahl ueber SEED_COUNT, einzelne
+Erwartungen (z. B. "3 Einrichtungen in Bayern", "5 mit E-Mail-Adresse") direkt
+auf den Inhalt von e2e/data/centers.csv. Wer die CSV aendert, passt diese mit an.
 """
+import csv
 import re
 from pathlib import Path
 
 import psycopg
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+E2E_DIR = Path(__file__).resolve().parent
+REPO_ROOT = E2E_DIR.parent
 IMPORT_SQL = REPO_ROOT / "db" / "import_centers.sql"
+SEED_CSV = E2E_DIR / "data" / "centers.csv"
+
+
+def _count_seed_rows(path: Path) -> int:
+    with path.open(encoding="utf-8", newline="") as source:
+        return sum(1 for row in csv.DictReader(source, delimiter=";") if row.get("unsere_id"))
+
+
+# Anzahl Datensaetze im Seed - aus der CSV abgeleitet statt hart kodiert.
+SEED_COUNT = _count_seed_rows(SEED_CSV)
 
 _COPY_LINE = re.compile(r"^\\copy\s+(?P<table>\S+)\s+FROM\s+'[^']*'\s+(?P<options>WITH\s*\(.*\))\s*$", re.M)
 

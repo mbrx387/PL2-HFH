@@ -290,6 +290,9 @@ docker compose -f e2e/docker-compose.e2e.yml down -v
   unter `test-results/<test>/` (`python -m playwright show-trace …/trace.zip`), der
   HTML-Report unter `playwright-report/index.html`, das App-Log unter
   `build/e2e-app.log`. In CI werden sie als Artifact hochgeladen.
+- **App-Start:** `pytest e2e` startet die Test-App lokal und in CI auf demselben Weg.
+  Optional zum Debuggen: App mit `python e2e/run_app.py` selbst starten und die Tests
+  mit `E2E_BASE_URL=http://127.0.0.1:8800 pytest e2e` dagegen laufen lassen.
 - `localhost` bewusst vermeiden und `127.0.0.1` verwenden: unter Windows/Docker Desktop
   hängt der IPv6-Versuch (`::1`) sonst ohne Timeout.
 

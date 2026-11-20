@@ -19,7 +19,9 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 APP_HOST = "127.0.0.1"
 APP_PORT = 8800
 DEFAULT_BASE_URL = f"http://{APP_HOST}:{APP_PORT}"
-DEFAULT_DATABASE_URL = "postgresql://pl2:e2e@127.0.0.1:55432/pflegedb_e2e"
+# connect_timeout: ohne erreichbare DB sofort mit klarem Fehler abbrechen statt
+# endlos zu warten (Docker Desktop nimmt Verbindungen auch bei gestopptem Container an).
+DEFAULT_DATABASE_URL = "postgresql://pl2:e2e@127.0.0.1:55432/pflegedb_e2e?connect_timeout=5"
 
 LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}
 REQUIRED_DB_SUFFIX = "_e2e"
@@ -79,7 +81,10 @@ def main() -> None:
 
     import uvicorn
 
-    uvicorn.run("app.main:app", host=APP_HOST, port=APP_PORT, log_level="info")
+    # Port aus E2E_BASE_URL, damit App und Tests dieselbe Adresse nutzen; der
+    # Host bleibt fest lokal.
+    port = urlsplit(base_url()).port or APP_PORT
+    uvicorn.run("app.main:app", host=APP_HOST, port=port, log_level="info")
 
 
 if __name__ == "__main__":

@@ -2,8 +2,9 @@
 
 - Sicherheitspruefung: der Lauf bricht ab, bevor irgendetwas passiert, wenn
   Datenbank oder App nicht eindeutig lokale Testinstanzen sind.
-- app_server: startet die App (e2e/run_app.py), sofern E2E_BASE_URL nicht
-  gesetzt ist (in CI startet der Workflow die App selbst).
+- app_server: startet die App (e2e/run_app.py) - lokal und in CI derselbe
+  Weg. Nur wenn E2E_BASE_URL gesetzt ist, wird eine bereits laufende
+  Test-App verwendet (optional, zum Debuggen).
 - reset_db: vor JEDEM Test derselbe Datenbestand (e2e/data/centers.csv).
 """
 import os
@@ -15,19 +16,16 @@ import urllib.request
 from pathlib import Path
 
 import pytest
-from db_seed import reset_database
+from db_seed import SEED_CSV, reset_database
 from playwright.sync_api import Page
 from run_app import base_url as configured_base_url
 from run_app import database_url, safety_problems
 
 E2E_DIR = Path(__file__).resolve().parent
 REPO_ROOT = E2E_DIR.parent
-SEED_CSV = E2E_DIR / "data" / "centers.csv"
 APP_LOG = REPO_ROOT / "build" / "e2e-app.log"
 STARTUP_TIMEOUT_S = 30
-
-# Anzahl Datensaetze in e2e/data/centers.csv - Tests beziehen sich darauf.
-SEED_COUNT = 6
+LOG_TAIL_LINES = 30
 
 
 def pytest_sessionstart(session):
@@ -55,15 +53,26 @@ def _wait_until_healthy(url: str, timeout_s: float, proc: subprocess.Popen | Non
         if proc is not None and proc.poll() is not None:
             break
         time.sleep(0.5)
-    hint = f" App-Log: {APP_LOG}" if proc is not None else ""
-    raise RuntimeError(f"App unter {url} nicht erreichbar (/healthz).{hint}")
+    message = f"App unter {url} nicht erreichbar (/healthz)."
+    if proc is not None:
+        # Ursache direkt in der Fehlermeldung (und damit im CI-Log) zeigen.
+        message += f"\nLetzte Zeilen aus {APP_LOG}:\n{_log_tail()}"
+    raise RuntimeError(message)
+
+
+def _log_tail() -> str:
+    try:
+        lines = APP_LOG.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError as exc:
+        return f"(Log nicht lesbar: {exc})"
+    return "\n".join(lines[-LOG_TAIL_LINES:]) or "(Log ist leer)"
 
 
 @pytest.fixture(scope="session")
 def app_server():
     url = configured_base_url()
     if os.environ.get("E2E_BASE_URL"):
-        # Extern gestartet (z. B. GitHub Actions) - nur pruefen.
+        # Bewusst extern gestartet (python e2e/run_app.py) - nur pruefen.
         _wait_until_healthy(url, STARTUP_TIMEOUT_S)
         yield url
         return
@@ -80,6 +89,8 @@ def app_server():
         proc = subprocess.Popen(
             [sys.executable, str(E2E_DIR / "run_app.py")],
             cwd=REPO_ROOT,
+            # Ungepuffert, damit das Log auch bei einem Absturz vollstaendig ist.
+            env={**os.environ, "PYTHONUNBUFFERED": "1"},
             stdout=log,
             stderr=subprocess.STDOUT,
         )
