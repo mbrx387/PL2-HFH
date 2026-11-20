@@ -2,7 +2,7 @@
  * Pflegezentren-Finder – Oberfläche (ohne Build-Schritt, ohne Framework).
  *
  * Ansichten: Übersicht, Einrichtungen, Datenpflege (nur editor/admin),
- * E-Mail-Zentrale, Versandhistorie. Die Rechte prüft der Server
+ * E-Mail-Zentrale, Versandhistorie, Benutzerverwaltung. Die Rechte prüft der Server
  * (require_permission); data-can-edit blendet nur Bedienelemente aus.
  *
  * Kein innerHTML mit Daten aus der API: alle Texte über textContent,
@@ -147,6 +147,10 @@ function showView(name) {
     history.replaceState(null, "", `#${name}`);
   }
   if (name === "email") renderEmailRecipients();
+// Beim Öffnen der Historie oder des Dashboards die
+  // dokumentierten E-Mail-Übergaben aus PR#47 laden.
+  if (name === "historie" || name === "dashboard") loadMailHistory();
+  
  if (name === "benutzer" && canEdit) loadUsers();
   window.scrollTo(0, 0);
 }
@@ -329,78 +333,199 @@ function renderEmailRecipients() {
   $("email-recipient-count").textContent = String(state.selected.size);
 }
 
-function buildMailto(batch, subject, body) {
-  const params = [`bcc=${encodeURIComponent(batch.join(","))}`];
-  if (subject) params.push(`subject=${encodeURIComponent(subject)}`);
-  if (body) params.push(`body=${encodeURIComponent(body)}`);
-  return `mailto:?${params.join("&")}`;
-}
-
-function prepareEmail(event) {
+// GEÄNDERT AP6:
+// Die vorhandene E-Mail-Vorbereitung wird mit PR#47 verbunden. Ausgewählte Einrichtungs-IDs oder gesetzte Filter werden an das Backend gesendet. AP5 erstellt die BCC-Gruppen.
+async function prepareEmail(event) {
   event.preventDefault();
+
   const message = $("email-form-message");
-  const batchesBox = $("email-batches");
-  batchesBox.replaceChildren();
-  batchesBox.hidden = true;
+  const box = $("email-batches");
 
-  const emails = selectedEmails();
+  box.replaceChildren();
+  box.hidden = true;
+
   const subject = $("email-subject").value.trim();
-  const body = $("email-body").value.trim();
-
-  if (!emails.length) {
-    setMessage(message, "Bitte zuerst Einrichtungen mit E-Mail-Adresse auswählen.", "error");
-    return;
-  }
   if (!subject) {
     setMessage(message, "Bitte einen Betreff eingeben.", "error");
-    $("email-subject").focus();
     return;
   }
 
-  const batches = [];
-  for (let i = 0; i < emails.length; i += MAIL_BATCH_SIZE) {
-    batches.push(emails.slice(i, i + MAIL_BATCH_SIZE));
-  }
-  const links = batches.map((batch) => buildMailto(batch, subject, body));
-  const tooLong = links.some((href) => href.length > MAILTO_WARN_LENGTH);
+  // IDs der manuell ausgewählten Einrichtungen sammeln.
+  const ids = [...state.selected.keys()];
 
-  if (links.length === 1 && !tooLong) {
-    setMessage(message, `Dein Mailprogramm wird mit ${emails.length} Empfängern im BCC geöffnet.`, "success");
-    window.location.href = links[0];
+  // Alternativ die aktuellen Suchfilter verwenden.
+  const filters = {
+    search: state.search || null,
+    bundesland: state.bundesland || null,
+    angebot: state.angebot || null,
+  };
+
+  if (!ids.length && !Object.values(filters).some(Boolean)) {
+    setMessage(message, "Bitte Einrichtungen auswählen oder Filter setzen.", "error");
     return;
   }
 
-  batchesBox.appendChild(
-    el("p", null, `${emails.length} Empfänger, aufgeteilt in ${links.length} Nachrichten. Öffne die Teile nacheinander:`)
-  );
-  links.forEach((href, index) => {
-    const link = el(
-      "a",
-      "secondary-button",
-      `Teil ${index + 1} von ${links.length} öffnen (${batches[index].length} Empfänger)`
-    );
-    link.href = href;
-    batchesBox.appendChild(link);
-  });
-  batchesBox.hidden = false;
-  if (tooLong) {
+  try {
+    // Anfrage für den AP5-Endpunkt vorbereiten.
+    const request = {
+      subject,
+      body: $("email-body").value.trim(),
+    };
+
+    // Manuelle Auswahl hat Vorrang vor Filtern.
+    if (ids.length) {
+      request.center_ids = ids;
+    } else {
+      request.filters = filters;
+    }
+
+    // AP5 übernimmt die Empfängerauswahl und BCC-Aufteilung.
+    const result = await api("/api/mail/prepare", {
+      method: "POST",
+      body: JSON.stringify(request),
+    });
+
     setMessage(
       message,
-      "Hinweis: Die Nachricht ist sehr lang. Manche Mailprogramme kürzen lange Links – den Text ggf. im Mailprogramm einfügen.",
+      `${result.recipient_count} Empfänger in ${result.batch_count} BCC-Gruppen vorbereitet.`,
+      "success"
+    );
+
+    // Für jede vorbereitete BCC-Gruppe einen Button erstellen.
+    for (const batch of result.batches) {
+      const button = el(
+        "button",
+        "secondary-button",
+        `Teil ${batch.number} öffnen (${batch.recipient_count} Empfänger)`
+      );
+
+      button.type = "button";
+
+      button.addEventListener("click", async () => {
+        button.disabled = true;
+
+        try {
+          // Übergabe an das Mailprogramm dokumentieren.
+          const handoff = await api("/api/mail/handoff", {
+            method: "POST",
+            body: JSON.stringify({
+              handoff_token: batch.handoff_token,
+            }),
+          });
+
+          // Nur mailto-Links zulassen.
+          if (!handoff.mailto_url?.startsWith("mailto:")) {
+            throw new Error("Ungültiger Mail-Link.");
+          }
+
+          // Lokales Mailprogramm öffnen.
+          window.location.href = handoff.mailto_url;
+
+          // WICHTIG: Die Historie dokumentiert nur die Übergabe, nicht den tatsächlichen Versand.
+          setMessage(
+            message,
+            "Übergabe protokolliert. Versand bitte im Mailprogramm bestätigen.",
+            "success"
+          );
+
+        } catch (error) {
+          setMessage(message, error.message, "error");
+
+        } finally {
+          button.disabled = false;
+        }
+      });
+
+      box.appendChild(button);
+    }
+
+    box.hidden = result.batches.length === 0;
+
+  } catch (error) {
+    setMessage(
+      message,
+      `Vorbereitung fehlgeschlagen: ${error.message}`,
       "error"
     );
-  } else {
-    setMessage(message, "");
   }
 }
 
 function clearEmail() {
   $("email-subject").value = "";
   $("email-body").value = "";
+
   $("email-batches").replaceChildren();
   $("email-batches").hidden = true;
+
   setMessage($("email-form-message"), "");
 }
+
+// Die Versandhistorie aus PR#47 wird in der Tabelle und im Dashboard angezeigt.
+async function loadMailHistory() {
+  const tbody = $("mail-history-body");
+  const message = $("mail-history-message");
+
+  if (!tbody || !message) return;
+
+  tbody.replaceChildren();
+  setMessage(message, "Historie wird geladen ...");
+
+  try {
+    // Bis zu 50 dokumentierte Übergaben abrufen.
+    const data = await api("/api/mail-history?limit=50&offset=0");
+
+    // Gesamtzahl im Dashboard aktualisieren.
+    $("dashboard-history-count").textContent = String(data.total);
+
+    // Historientabelle mit API-Daten befüllen.
+    for (const item of data.items) {
+      const row = el("tr");
+
+      const values = [
+        new Date(item.created_at).toLocaleString("de-DE"),
+        item.subject,
+        item.recipient_count,
+        "An Mailprogramm übergeben",
+      ];
+
+      for (const value of values) {
+        row.appendChild(el("td", null, String(value)));
+      }
+
+      tbody.appendChild(row);
+    }
+
+    // Hinweis bei leerer Historie anzeigen.
+    if (!data.items.length) {
+      const row = el("tr");
+
+      const cell = el(
+        "td",
+        "empty-cell",
+        "Noch keine Übergaben dokumentiert."
+      );
+
+      cell.colSpan = 4;
+      row.appendChild(cell);
+      tbody.appendChild(row);
+    }
+
+    setMessage(
+      message,
+      `${data.total} Übergaben dokumentiert (max. 50 angezeigt).`
+    );
+
+  } catch (error) {
+    $("dashboard-history-count").textContent = "–";
+
+    setMessage(
+      message,
+      `Historie konnte nicht geladen werden: ${error.message}`,
+      "error"
+    );
+  }
+}
+
 
 /* ------------------------------------------------------------------ */
 /* Datenpflege (nur editor/admin)                                      */
@@ -620,7 +745,9 @@ async function loadUsers() {
       row.appendChild(actions);
       table.appendChild(row);
     }
-
+     // Aktuellen Suchfilter nach dem Neuladen erneut anwenden.
+    filterUsers();
+    
     setMessage(message, users.length ? `${users.length} Benutzer angezeigt.` : "Noch keine Benutzer vorhanden.");
   } catch (error) {
     setMessage(message, `Benutzer konnten nicht geladen werden: ${error.message}`, "error");
@@ -666,7 +793,14 @@ function bindEvents() {
     const usersRefresh = $("users-refresh");
     if (userForm) userForm.addEventListener("submit", createUser);
     if (usersRefresh) usersRefresh.addEventListener("click", loadUsers);
+  
+// Live-Suche in der Benutzerverwaltung aktivieren.
+ const usersSearch = $("users-search");
+    if (usersSearch) {
+      usersSearch.addEventListener("input", filterUsers);
+    }
   }
+  
   document.querySelectorAll(".nav-link").forEach((link) => {
     link.addEventListener("click", (event) => {
       event.preventDefault();
@@ -723,7 +857,9 @@ function bindEvents() {
   $("select-visible").addEventListener("click", selectVisible);
   $("clear-selection").addEventListener("click", clearSelection);
 
+  // Das E-Mail-Formular nutzt die AP5-Backend-Anbindung.
   $("email-form").addEventListener("submit", prepareEmail);
+  // Zurücksetzen-Funktion inklusive BCC-Gruppen verwenden.
   $("clear-email").addEventListener("click", clearEmail);
 
   if (canEdit) {
