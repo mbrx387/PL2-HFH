@@ -64,7 +64,9 @@ Betriebsanleitung (Server-Inbetriebnahme, Keycloak): siehe
 - [ ] Keycloak-Härtung auf dem Server anwenden: `./keycloak/configure.sh`
       (Brute-Force-Schutz, Passwort-Richtlinie, Audit, OTP, Gruppen; im Repo
       vorbereitet). „Passwort vergessen“ erst mit E-Mail-Versand wieder einschalten
-- [ ] Backup der Keycloak-Datenbank
+- [x] Regelmäßige Backups beider Datenbanken (`scripts/backup_db.sh`,
+      Custom-Format `pg_dump -Fc`, 14 Tage Rotation, Cron-Beispiel und
+      dokumentierte/praxiserprobte Restore-Prozedur)
 
 ### Backend
 - [ ] Login-Prüfung von Middleware auf FastAPI-Dependency umstellen
@@ -78,7 +80,9 @@ Betriebsanleitung (Server-Inbetriebnahme, Keycloak): siehe
 ### Betrieb / CI
 - [ ] Automatischer Rollback bei fehlgeschlagenem Health-Check
 - [ ] GitHub Actions aktualisieren (Node-20-Deprecation) und auf Commit-SHAs pinnen
-- [ ] Strukturiertes Logging und Uptime-Monitoring
+- [x] Uptime Kuma und Netdata als optionales Docker-Compose-Profil `monitoring`,
+      nur intern und per nginx-TLS-Proxy mit Basic Auth erreichbar
+- [ ] Externen Alarmkanal (E-Mail/Telegram) in Uptime Kuma konfigurieren
 
 ### Später / optional
 - [ ] Automatischer Daten-Sync aus einer offiziellen Quelle statt CSV-Pflege

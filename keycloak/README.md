@@ -255,110 +255,125 @@ Alle Wege beziehen sich auf den Realm **`hfh-pflege`** (oben links auswählen).
 
 ---
 
-## 11. Backup: der Zweitschlüssel im Tresor
+## 11. Backups und Wiederherstellung
 
-Alle Konten, Passwörter (als Hash), Gruppen und Einstellungen liegen **nur** in
-der Datenbank `keycloak-db`. Geht sie verloren, ist die Behörde leer: Niemand
-kann sich mehr anmelden, und alles müsste neu eingerichtet werden. Deshalb wird
-jede Nacht eine Kopie gezogen. Die App-Datenbank `app-db` mit den
-Pflegestellen wird gleich mitgesichert.
+Die Datenbanken `app-db/pflegedb` und `keycloak-db/keycloak` werden logisch mit
+`pg_dump -Fc -Z 9` gesichert. Das Custom-Format wird mit `pg_restore` gelesen
+und ist portabler als ein Docker-Volume-Snapshot. Das Skript stoppt keine
+Container und enthält keine Datenbank-Passwörter oder sonstigen Secrets.
 
 ```mermaid
 flowchart LR
-    K[(🗄️ keycloak-db)] -->|jede Nacht 03:30| S[📦 /var/backups/pl2-hfh<br/>14 Tage auf dem Server]
-    A[(🗄️ app-db)] -->|jede Nacht 03:30| S
-    S -->|regelmäßig kopieren| O[🏦 Kopie außerhalb<br/>des Servers]
-    O -.->|im Notfall| R[🔁 Wiederherstellen]
+    K[(keycloak-db)] -->|täglich 03:30| S[/var/backups/pl2-hfh/]
+    A[(app-db)] -->|täglich 03:30| S
+    S -->|regelmäßig kopieren| O[andere Sicherung]
+    O -.->|im Notfall| R[pg_restore]
 ```
 
 | Frage | Antwort |
 |---|---|
-| **Was wird gesichert?** | `keycloak-db` (Konten, Gruppen, Einstellungen, Events) und `app-db` (Pflegestellen) als komprimierte SQL-Dateien |
-| **Wann?** | Täglich um 03:30 Uhr (Cronjob) und zusätzlich von Hand **vor jedem Keycloak-Update** |
-| **Wo?** | Auf dem Server unter `/var/backups/pl2-hfh`, dort 14 Tage lang, plus eine Kopie außerhalb des Servers |
-| **Was ist NICHT im Backup?** | Die `.env` mit allen Passwörtern und das TLS-Zertifikat. Beides gehört in den Passwortmanager bzw. ist neu beziehbar. |
-| **Wie sicher sind die Dateien?** | Sie enthalten Passwort-Hashes und Kontaktdaten. Nur an geschützten Orten ablegen, nie ins Repository oder in Chats. |
+| **Was wird gesichert?** | Beide Datenbanken einzeln: `pflegedb-<UTC-Zeit>.dump` und `keycloak-<UTC-Zeit>.dump` |
+| **Wann?** | Täglich um 03:30 Uhr; zusätzlich von Hand vor Updates |
+| **Wo?** | `/var/backups/pl2-hfh`, Standard-Aufbewahrung 14 Tage |
+| **Nicht im Scope** | Keine `.env`-Secrets, Zertifikate, Volume-Dateiebenen oder Verschlüsselung |
+| **Dateirechte** | Verzeichnis und Dump-Dateien erhalten Modus `700` bzw. `600` |
 
-### Einrichtung (einmalig, als root auf dem Server)
+### Einrichtung und tägliche Ausführung
 
-**1. Skript anlegen**
+Auf dem Server muss das Repository unter `/opt/pl2-hfh` liegen. Beide Datenbank-
+Container müssen laufen und das Keycloak-Profil muss aktiviert sein:
 
 ```bash
-cat > /opt/pl2-hfh/backup.sh <<'SH'
-#!/usr/bin/env bash
-# Sichert keycloak-db und app-db als komprimierte SQL-Dumps.
-set -euo pipefail
 cd /opt/pl2-hfh
-ZIEL=/var/backups/pl2-hfh
-mkdir -p "$ZIEL"
-STAMP=$(date +%F_%H%M)
-docker compose exec -T keycloak-db pg_dump -U keycloak keycloak | gzip > "$ZIEL/keycloak-$STAMP.sql.gz"
-docker compose exec -T app-db pg_dump -U pl2 pflegedb | gzip > "$ZIEL/app-$STAMP.sql.gz"
-# Dumps unter 1 KB gelten als fehlgeschlagen.
-for f in "$ZIEL/keycloak-$STAMP.sql.gz" "$ZIEL/app-$STAMP.sql.gz"; do
-  [ "$(stat -c %s "$f")" -gt 1024 ] || { echo "Backup zu klein: $f" >&2; exit 1; }
-done
-# Nur die letzten 14 Tage behalten.
-find "$ZIEL" -name '*.sql.gz' -mtime +14 -delete
-echo "Backup ok: $STAMP"
-SH
-chmod 700 /opt/pl2-hfh/backup.sh
+docker compose --profile sso up -d app-db keycloak-db
+chmod 700 scripts/backup_db.sh
+./scripts/backup_db.sh
+ls -lh /var/backups/pl2-hfh
 ```
 
-**2. Einmal von Hand testen**
-
-```bash
-/opt/pl2-hfh/backup.sh && ls -lh /var/backups/pl2-hfh
-```
-
-**3. Täglich automatisch ausführen** (`crontab -e`, diese Zeile ergänzen):
+Für einen eigenen Aufbewahrungszeitraum kann die Variable `RETENTION_DAYS`
+beim Aufruf gesetzt werden; der Default ist 14 Tage:
 
 ```text
-30 3 * * * /opt/pl2-hfh/backup.sh >> /var/log/pl2-backup.log 2>&1
+30 3 * * * cd /opt/pl2-hfh && ./scripts/backup_db.sh >> /var/log/pl2-backup.log 2>&1
 ```
 
-**4. Kopie außerhalb des Servers.** Ein Backup, das nur auf demselben Server
-liegt, hilft nicht, wenn der Server ausfällt. Zum Beispiel regelmäßig auf
-einen anderen Rechner holen:
+Die Zeile kann als Root oder als ein Benutzer mit Docker-Zugriff in `crontab -e`
+eingetragen werden. Der gleichzeitige Start wird mit einem Lock verhindert.
+Eine Kopie außerhalb des Servers sollte separat geplant werden; sie ist bewusst
+nicht Bestandteil des Repository-Skripts:
 
 ```bash
-scp '<benutzer>@<server>:/var/backups/pl2-hfh/*.sql.gz' ~/Backups/pl2-hfh/
+scp '<benutzer>@<server>:/var/backups/pl2-hfh/*.dump' ~/Backups/pl2-hfh/
 ```
 
-### Probe: Funktioniert das Backup wirklich?
+### Probe: Restore in Testdatenbanken
 
-Ein Backup ist erst etwas wert, wenn man es zurückspielen kann. Mindestens
-einmal und danach etwa alle drei Monate in eine **Test-Datenbank** einspielen.
-Die echte Datenbank bleibt dabei unberührt:
-
-```bash
-cd /opt/pl2-hfh
-docker compose exec keycloak-db createdb -U keycloak keycloak_test
-gunzip -c /var/backups/pl2-hfh/keycloak-<datum>.sql.gz \
-  | docker compose exec -T keycloak-db psql -q -U keycloak -d keycloak_test
-docker compose exec keycloak-db psql -U keycloak -d keycloak_test \
-  -c "SELECT count(*) AS konten FROM user_entity;"
-docker compose exec keycloak-db dropdb -U keycloak keycloak_test
-```
-
-### Notfall: Keycloak-Datenbank wiederherstellen
-
-Nur wenn die echte Datenbank kaputt oder verloren ist. Alles, was nach dem
-Backup geändert wurde (neue Konten, Passwortwechsel), geht dabei verloren.
+Restore-Probe am 19.11.2026 durchgeführt: Die erzeugten Dumps beider Datenbanken
+wurden mit `pg_restore --clean --if-exists --no-owner --no-privileges` in jeweils
+frische Testdatenbanken eingespielt. Die App-Wiederherstellung ergab 4092 Einträge
+in `centers`; der Keycloak-Dump ließ sich ebenfalls vollständig in die leere
+Testdatenbank einlesen. Anschließend wurden beide Testdatenbanken wieder gelöscht.
+Die lokalen Produktivdatenbanken blieben unberührt.
 
 ```bash
 cd /opt/pl2-hfh
+BACKUP=/var/backups/pl2-hfh
+APP_DUMP=$(ls -t "$BACKUP"/pflegedb-*.dump | head -n1)
+KC_DUMP=$(ls -t "$BACKUP"/keycloak-*.dump | head -n1)
+
+docker compose exec keycloak-db createdb -U keycloak keycloak_restore_test
+docker compose exec -T keycloak-db pg_restore --clean --if-exists --no-owner --no-privileges \
+  -U keycloak -d keycloak_restore_test < "$KC_DUMP"
+docker compose exec keycloak-db psql -U keycloak -d keycloak_restore_test \
+  -c 'SELECT count(*) AS user_count FROM user_entity;' \
+  -c 'SELECT count(*) AS realm_count FROM realm;'
+docker compose exec keycloak-db dropdb -U keycloak keycloak_restore_test
+
+# Analog für die App-Datenbank:
+docker compose exec app-db createdb -U pl2 pflegedb_restore_test
+docker compose exec -T app-db pg_restore --clean --if-exists --no-owner --no-privileges \
+  -U pl2 -d pflegedb_restore_test < "$APP_DUMP"
+docker compose exec app-db psql -U pl2 -d pflegedb_restore_test \
+  -c 'SELECT count(*) AS center_count FROM centers;'
+docker compose exec app-db dropdb -U pl2 pflegedb_restore_test
+```
+
+Die tatsächlichen Tabellen- und Sichtnamen können mit `pg_restore --list`
+geprüft werden. Bei Abweichungen den Restore nach den Produktivtabellen
+des jeweiligen Backups anpassen.
+
+### Restore der App-Datenbank
+
+Nur bei Datenverlust durchführen. Alle Änderungen nach dem gewählten
+Backup-Zeitpunkt gehen dabei verloren:
+
+```bash
+cd /opt/pl2-hfh
+APP_DUMP=/var/backups/pl2-hfh/pflegedb-<UTC-Zeit>.dump
+docker compose stop app
+docker compose exec app-db dropdb -U pl2 pflegedb
+docker compose exec app-db createdb -U pl2 pflegedb
+docker compose exec -T app-db pg_restore --clean --if-exists --no-owner --no-privileges \
+  -U pl2 -d pflegedb < "$APP_DUMP"
+docker compose up -d app
+```
+
+### Restore der Keycloak-Datenbank
+
+```bash
+cd /opt/pl2-hfh
+KC_DUMP=/var/backups/pl2-hfh/keycloak-<UTC-Zeit>.dump
 docker compose stop keycloak
 docker compose exec keycloak-db dropdb -U keycloak keycloak
 docker compose exec keycloak-db createdb -U keycloak keycloak
-gunzip -c /var/backups/pl2-hfh/keycloak-<datum>.sql.gz \
-  | docker compose exec -T keycloak-db psql -q -U keycloak -d keycloak
+docker compose exec -T keycloak-db pg_restore --clean --if-exists --no-owner --no-privileges \
+  -U keycloak -d keycloak < "$KC_DUMP"
 docker compose --profile sso up -d keycloak
 ```
 
-Danach prüfen: Login in der App klappt, die Admin-Konsole zeigt die erwarteten
-Konten. Das Datenbank-Passwort aus der `.env` muss zu dem passen, das im
-Backup gespeichert ist (siehe Abschnitt 14).
+Danach Login der App und die Keycloak-Admin-Konsole prüfen. Das Datenbank-
+Passwort aus `.env` muss zum wiederhergestellten Datenbankinhalt passen.
 
 ---
 

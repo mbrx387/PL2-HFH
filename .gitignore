@@ -15,6 +15,8 @@ venv/
 nginx/certs/*.pem
 nginx/certs/*.key
 nginx/certs/*.crt
+# Lokale Monitoring-Zugangsdaten, nie committen.
+nginx/htpasswd.monitoring
 
 # Persoenliche Editor-Einstellungen
 .vscode/

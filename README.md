@@ -386,6 +386,57 @@ Was die Realm-Datei und das Skript setzen:
 | Einmalcode (OTP) für neue Konten | Pflicht beim ersten Login | nein | ja |
 | Login-Schutz im Realm `master` | wie oben | nein | ja |
 
+### Leichtgewichtiges Monitoring
+
+Das Profil `monitoring` startet Uptime Kuma und Netdata:
+
+```bash
+cd /opt/pl2-hfh
+./scripts/setup_monitoring.sh
+docker compose --profile sso --profile monitoring up -d
+```
+
+Die Dashboards werden nur über HTTPS und Basic Auth angeboten:
+
+- Uptime Kuma: `https://pflege-finder.example.org/kuma/`
+- Netdata: `https://pflege-finder.example.org/netdata/`
+
+Uptime Kuma prüft den bestehenden HTTPS-Endpunkt
+`https://pflege-finder.example.org/healthz` sowie optional die Keycloak-Seite
+`https://pflege-finder.example.org/idp/realms/hfh-pflege/.well-known/openid-configuration`.
+Ein Ausfall erzeugt einen Alarm nur, wenn in der Kuma-Oberfläche ein
+Benachrichtigungskanal aktiviert wird.
+
+Für spätere E-Mail-Alarme dient Uptime Kuma als Konfigurationsstelle: Unter
+_Settings → Notifications_ einen SMTP-Typ hinzufügen, SMTP-Host/Port und
+Anmeldedaten eintragen und den Kanal allen Produktivmonitors zuweisen. Diese
+SMTP-Zugangsdaten gehören in Uptime Kuma beziehungsweise in die Passwort-/Secrets
+-Verwaltung des Betreibers, nicht in Git oder `.env`. Nach Einrichtung sollten
+Ausfall- und Wiederherstellungs-Mails getestet werden.
+
+Netdata läuft lokal ohne Netdata-Cloud-Verbindung. Es liefert CPU, RAM, Disk,
+Netzwerk und Docker-Container-Metriken. PostgreSQL-Metriken werden durch die
+automatische Agent-Erkennung ergänzt; zuerst `docker compose logs netdata`
+prüfen, falls ein Modul nicht erscheint.
+
+**Alarminterpretation und Maßnahmen:**
+
+- `/healthz` nicht erreichbar: zuerst `docker compose ps` und
+  `docker compose logs --tail=100 app nginx app-db` prüfen.
+- Keycloak nicht erreichbar: `docker compose ps keycloak keycloak-db` und
+  `docker compose logs --tail=100 keycloak keycloak-db` prüfen.
+- CPU/RAM/Disk alarmiert: `docker stats`, `df -h` und die Netdata-Dashboards prüfen.
+- Für einen HTTP-502- oder Timeout-Alarm nginx, App und Abhängigkeiten gemeinsam prüfen.
+- Bei Zertifikatsalarm auf Ablaufzeit und den Certbot-Timer prüfen.
+
+### Datenbank-Backups
+
+Regelmäßige Dumps für `pflegedb` und `keycloak` erstellt
+`scripts/backup_db.sh` als PostgreSQL-Custom-Format mit `pg_dump -Fc`. Das
+Skript rotiert Dateien nach 14 Tagen und prüft jeden Dump mit `pg_restore --list`.
+Cron-Einrichtung, Restore- und Testvorgänge stehen in
+[`keycloak/README.md`](keycloak/README.md), Abschnitt 11.
+
 Immer manuell (stehen bewusst nicht im Repository): Secrets in der `.env`,
 Client-Secret aus der Konsole übernehmen (Schritt 5), `frontendUrl` des
 `master`-Realms (Schritt 4), persönliche Admin-Konten, echte Benutzer und ihre
