@@ -790,7 +790,7 @@ async function createUser(event) {
 
 function bindEvents() {
  // Admin-Funktionen nur binden, wenn der Bereich vorhanden ist.
-  if (canEdit) {
+  if (canManageUsers) {
     const userForm = $("user-create-form");
     const usersRefresh = $("users-refresh");
     if (userForm) userForm.addEventListener("submit", createUser);
