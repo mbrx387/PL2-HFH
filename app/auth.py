@@ -78,6 +78,8 @@ APP_ROLES = frozenset({"reader", "editor", "admin"})
 ROLE_PERMISSIONS = {
     "read_centers": frozenset({"reader", "editor", "admin"}),
     "write_centers": frozenset({"editor", "admin"}),
+#Benutzerverwaltung ausschließlich für admin
+    "manage_users": frozenset({"admin"}),
 }
 
 
