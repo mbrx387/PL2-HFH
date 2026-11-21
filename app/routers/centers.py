@@ -1,12 +1,13 @@
 """Stellt rollen-geschützte Lese- und Schreibzugriffe auf Beratungsstellen bereit.
 
-Der E-Mail-Versand bleibt clientseitig über einen mailto:-Link; der Server
-verarbeitet keine Zugangsdaten und versendet selbst keine E-Mails.
+PR#47 / AP5:
+Die E-Mail-Vorbereitung verwendet dieselbe Filterlogik wie die
+Einrichtungssuche. Der eigentliche Versand erfolgt clientseitig über mailto:.
 """
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
-from sqlalchemy import func, select
+from sqlalchemy import Select, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
@@ -42,6 +43,43 @@ def _escape_like(value: str) -> str:
     """Maskiert SQL-LIKE-Platzhalter für eine wörtliche Freitextsuche."""
     return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
+# PR#47 + GEÄNDERT AP6:
+# Die Filterlogik aus list_centers() ist in eine wiederverwendbare Funktion
+# ausgelagert. GET /api/centers und die E-Mail-Auswahl (app/mail_service.py)
+# nutzen so exakt dieselben Suchbedingungen.
+# WICHTIG: absichtlich ohne Pagination - die E-Mail-Auswahl muss auch mehr als
+# 200 Einrichtungen finden können.
+# GEÄNDERT AP6: Es werden ausschließlich aktive Einrichtungen berücksichtigt.
+def apply_center_filters(
+    stmt: Select,
+    *,
+    search: str | None = None,
+    bundesland: str | None = None,
+    angebot: Angebot | None = None,
+) -> Select:
+    """Gemeinsame Filterlogik für Einrichtungssuche und AP5-Mailauswahl."""
+    # GEÄNDERT AP6: Deaktivierte Einrichtungen nicht berücksichtigen.
+    stmt = stmt.where(Center.aktiv.is_(True))
+
+    # PR#47: Filter nach Bundesland.
+    if bundesland:
+        stmt = stmt.where(func.trim(Center.bundesland) == bundesland.upper())
+
+    # PR#47: Freitextsuche nach Name, Ort oder Postleitzahl.
+    if search and search.strip():
+        like = f"%{_escape_like(search.strip())}%"
+        stmt = stmt.where(
+            Center.name.ilike(like, escape="\\")
+            | Center.ort.ilike(like, escape="\\")
+            | func.trim(Center.plz).ilike(like, escape="\\")
+        )
+
+    # PR#47: Filter nach Beratungsangebot.
+    if angebot:
+        stmt = stmt.where(Center.services.any(Service.name == OFFER_NAMES[angebot]))
+
+    return stmt
+
 
 @router.get("/centers", response_model=CenterListResponse)
 def list_centers(
@@ -54,23 +92,17 @@ def list_centers(
     offset: int = Query(0, ge=0),
 ):
     """Liefert aktive Stellen mit Filtern und begrenzter Seitengröße."""
-    stmt = select(Center).where(Center.aktiv.is_(True))
+    stmt = apply_center_filters(
+        select(Center),
+        search=search,
+        bundesland=bundesland,
+        angebot=angebot,
+    )
 
-    if bundesland:
-        stmt = stmt.where(func.trim(Center.bundesland) == bundesland.upper())
+    total = db.execute(
+        select(func.count()).select_from(stmt.subquery())
+    ).scalar_one()
 
-    if search and search.strip():
-        like = f"%{_escape_like(search.strip())}%"
-        stmt = stmt.where(
-            Center.name.ilike(like, escape="\\")
-            | Center.ort.ilike(like, escape="\\")
-            | func.trim(Center.plz).ilike(like, escape="\\")
-        )
-
-    if angebot:
-        stmt = stmt.where(Center.services.any(Service.name == OFFER_NAMES[angebot]))
-
-    total = db.execute(select(func.count()).select_from(stmt.subquery())).scalar_one()
     items = (
         db.execute(
             stmt.options(selectinload(Center.services))
@@ -86,12 +118,14 @@ def list_centers(
         total=total,
         items=[
             CenterOut.model_validate(i).model_copy(
-                update={"plz": i.plz.strip(), "bundesland": i.bundesland.strip()}
+                update={
+                    "plz": i.plz.strip(),
+                    "bundesland": i.bundesland.strip(),
+                }
             )
             for i in items
         ],
     )
-
 
 @router.get("/bundeslaender", response_model=list[str])
 def list_bundeslaender(

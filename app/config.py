@@ -6,6 +6,7 @@ Es werden bewusst KEINE Secrets im Code oder in diesem Repository abgelegt.
 """
 from functools import lru_cache
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Werte, die erkennbar nur Platzhalter aus .env.example/config.py sind.
@@ -36,6 +37,12 @@ class Settings(BaseSettings):
     app_db_user: str = "pl2"
     app_db_password: str = ""
     database_url: str | None = None
+
+    # AP5: Grenzwerte fuer die BCC-Aufteilung (siehe docs/AP5_EMAIL_HISTORY.md).
+    # Hoechstens 20 Empfaenger pro E-Mail; zusaetzlich begrenzte mailto:-Linklaenge,
+    # weil Mailprogramme (z.B. Outlook) sehr lange Links abschneiden.
+    mail_bcc_batch_size: int = Field(default=20, ge=1, le=20)
+    mail_max_mailto_length: int = Field(default=1800, ge=256, le=8000)
 
     # Schluessel zum Signieren des Session-Cookies (Login-Zustand). MUSS in
     # der Produktivumgebung ueberschrieben werden - siehe main.py, wo bei
