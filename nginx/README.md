@@ -315,6 +315,25 @@ Hook hat kopiert und nginx neu geladen. Von außen liefern `projekthfh.tech` und
 
 </details>
 
+### Subdomain ins Zertifikat aufnehmen (z. B. kuma.projekthfh.tech)
+
+1. **DNS:** `kuma.projekthfh.tech` als A/AAAA-Record auf die Server-IP legen.
+2. **nginx:** Port-80-Server um die Subdomain ergänzen (damit die
+   ACME-Challenge ausgeliefert wird) und eigenen 443-Server-Block anlegen –
+   siehe `conf.d/default.conf` (Block 1 und Block 5). Danach
+   `docker compose exec nginx nginx -t` und Reload.
+3. **certbot:** bestehende SANs aus `certbot certificates` übernehmen und die
+   Subdomain anhängen:
+
+   ```bash
+   sudo certbot certonly --cert-name projekthfh.tech \
+     --webroot -w /opt/pl2-hfh/nginx/acme-challenge \
+     -d projekthfh.tech -d www.projekthfh.tech -d kuma.projekthfh.tech
+   ```
+
+   Der Deploy-Hook (`pl2-hfh-nginx.sh`) installiert das neue Zertifikat
+   automatisch nach `nginx/certs/` und lädt nginx neu.
+
 ### Kurz prüfen, ob alles stimmt
 
 ```bash

@@ -412,8 +412,8 @@ docker compose --profile sso --profile monitoring up -d
 
 Die Dashboards werden nur über HTTPS und Basic Auth angeboten:
 
-- Uptime Kuma: `https://pflege-finder.example.org/kuma/`
-- Netdata: `https://pflege-finder.example.org/netdata/`
+- Uptime Kuma: `https://kuma.pflege-finder.example.org/` – **eigene Subdomain**, weil Kuma keinen Subpath-Betrieb unterstützt (Redirects/Assets zeigen auf `/`, nicht auf `/kuma/`). Voraussetzungen: DNS-Record `kuma.<domain>` auf die Server-IP und certbot-Zertifikat um die Subdomain erweitern (siehe `nginx/README.md`, Abschnitt 7). Alte Aufrufe von `https://pflege-finder.example.org/kuma/...` leitet nginx auf die Subdomain um.
+- Netdata: `https://pflege-finder.example.org/netdata/` (Subpath; falls Netdata ebenfalls 404s zeigt, analog auf `netdata.<domain>` umziehen)
 
 Uptime Kuma prüft den bestehenden HTTPS-Endpunkt
 `https://pflege-finder.example.org/healthz` sowie optional die Keycloak-Seite

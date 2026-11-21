@@ -31,6 +31,10 @@ else
   printf '%s:%s\n' "$username" "$hash" > "$OUTPUT"
 fi
 
-chmod 600 "$OUTPUT"
+# 644 statt 600: nginx mountet die Datei als Datei-Bind-Mount (Host-Rechte
+# gelten im Container). Der nginx-Worker laeuft als User "nginx" (uid 101),
+# nicht als root - mit 600 root:root kann er die Datei nicht lesen und nginx
+# antwortet "open() ... failed (13: Permission denied)" -> HTTP 500.
+chmod 644 "$OUTPUT"
 unset password password_confirm
 echo "Monitoring-Zugang gespeichert: $OUTPUT"
