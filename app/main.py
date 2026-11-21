@@ -148,6 +148,8 @@ def index(request: Request):
     # Nur fuer die Anzeige (Menuepunkt "Datenpflege" ein-/ausblenden); die
     # eigentliche Pruefung passiert serverseitig in require_permission().
     can_edit = has_permission(user, "write_centers") if settings.auth_enabled else True
+    eigene Berechtigung für Benutzerverwaltung
+    can_manage_users = has_permission(user, "manage_users") if settings.auth_enabled else True
     roles = (user or {}).get("roles") or []
     role_label = next((ROLE_LABELS[r] for r in ("admin", "editor", "reader") if r in roles), "")
     return templates.TemplateResponse(
@@ -157,6 +159,8 @@ def index(request: Request):
             "app_name": settings.app_name,
             "user": user,
             "can_edit": can_edit,
+            #Berechtigung ans Template übergeben
+            "can_manage_users": can_manage_users,
             "role_label": role_label if settings.auth_enabled else "Entwicklung",
         },
     )
