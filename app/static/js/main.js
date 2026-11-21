@@ -43,7 +43,10 @@ const VIEWS = {
 
 const canEdit = document.body.dataset.canEdit === "true";
 /*getrennte Frontend-Berechtigung für Benutzerverwaltung*/
-const canManageUsers = document.body.dataset.canManageUsers === "true";
+const canEdit =
+  document.body.dataset.canEdit === "true";
+const canManageUsers =
+  document.body.dataset.canManageUsers === "true";
 const $ = (id) => document.getElementById(id);
 
 const state = {
