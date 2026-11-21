@@ -328,7 +328,7 @@ Hook hat kopiert und nginx neu geladen. Von außen liefern `projekthfh.tech` und
    ```bash
    sudo certbot certonly --cert-name projekthfh.tech \
      --webroot -w /opt/pl2-hfh/nginx/acme-challenge \
-     -d projekthfh.tech -d www.projekthfh.tech -d kuma.projekthfh.tech
+     -d projekthfh.tech -d www.projekthfh.tech -d kuma.projekthfh.tech -d netdata.projekthfh.tech
    ```
 
    Der Deploy-Hook (`pl2-hfh-nginx.sh`) installiert das neue Zertifikat
