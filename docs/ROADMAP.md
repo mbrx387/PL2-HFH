@@ -88,5 +88,6 @@ Betriebsanleitung (Server-Inbetriebnahme, Keycloak): siehe
 - [ ] Automatischer Daten-Sync aus einer offiziellen Quelle statt CSV-Pflege
 - [ ] Warnung/Aufteilung bei sehr vielen E-Mail-Empfängern (`mailto:`-Längenlimit)
 - [ ] Kartenansicht (Geokoordinaten sind vorhanden)
-- [ ] UI-Tests (Playwright)
+- [x] UI-Tests (Playwright): Smoke-/Critical-Path-Tests ohne Login (`e2e/`, Workflow `playwright.yml`)
+- [ ] UI-Tests mit Keycloak-Login (Phase 2: Test-Realm-Setup, Rollen, Logout)
 - [ ] Anbindung an einen zentralen Hochschul-Login (Keycloak als Identity Broker)

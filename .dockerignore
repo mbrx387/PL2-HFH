@@ -10,6 +10,11 @@ nginx
 scripts
 docs
 tests
+e2e
+requirements-e2e.txt
+test-results
+playwright-report
+build
 .github
 pyproject.toml
 requirements-dev.txt

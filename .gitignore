@@ -24,3 +24,9 @@ nginx/htpasswd.monitoring
 # certbot-Challenge-Dateien (Webroot), nur kurzzeitig auf dem Server
 nginx/acme-challenge/*
 !nginx/acme-challenge/.gitkeep
+
+# E2E-Tests (Playwright): Report, Fehler-Artefakte, App-Log, Login-Zustaende
+test-results/
+playwright-report/
+build/
+e2e/.auth/

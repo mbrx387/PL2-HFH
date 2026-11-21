@@ -1,0 +1,7 @@
+unsere_id;zqp_id;name;adresse;plz;ort;bundesland;email;telefon;website;latitude;longitude;pflegestuetzpunkt;pflegeberatung;wohnberatung;demenzberatung;angehoerigenberatung;betreuungsberatung;leistungen;updated_at
+101;e2e-101;E2E Pflegestützpunkt Dresden;Teststraße 1;01067;Dresden;SN;dresden@e2e.example.org;0351-100;https://dresden.e2e.example.org;51.05;13.74;1;1;0;0;0;0;Pflegestützpunkt, Pflegeberatung;2026-01-01 00:00:00
+102;e2e-102;E2E Angehörigenberatung Leipzig;Testweg 2;04109;Leipzig;SN;leipzig@e2e.example.org;0341-200;;51.34;12.37;0;0;0;0;1;0;Angehörigenberatung;2026-01-01 00:00:00
+103;e2e-103;E2E Seniorenberatung Chemnitz;Testplatz 3;09111;Chemnitz;SN;;0371-300;;50.83;12.92;0;1;0;0;0;0;Pflegeberatung;2026-01-01 00:00:00
+104;e2e-104;E2E Demenzberatung München;Testallee 4;80331;München;BY;muenchen@e2e.example.org;089-400;;48.14;11.58;0;0;0;1;0;0;Demenzberatung;2026-01-01 00:00:00
+105;e2e-105;E2E Wohnberatung Nürnberg;Testgasse 5;90402;Nürnberg;BY;nuernberg@e2e.example.org;0911-500;;49.45;11.08;0;0;1;0;0;0;Wohnberatung;2026-01-01 00:00:00
+106;e2e-106;E2E Betreuungsberatung Augsburg;Testring 6;86150;Augsburg;BY;augsburg@e2e.example.org;0821-600;;48.37;10.90;0;0;0;0;0;1;Betreuungsberatung;2026-01-01 00:00:00

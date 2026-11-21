@@ -1,0 +1,36 @@
+# Isolierte Infrastruktur NUR fuer die End-to-End-Tests (siehe README.md, Abschnitt 7).
+#
+#   docker compose -f e2e/docker-compose.e2e.yml up -d --wait
+#   docker compose -f e2e/docker-compose.e2e.yml down -v
+#
+# Bewusst getrennt von ../docker-compose.yml:
+#   - eigener Projektname -> eigene Container/Netzwerke, die Dev-/Prod-Stack
+#     und deren Volumes (app-db-data) werden nie beruehrt
+#   - kein env_file: .env -> keine echten Secrets, keine Produktivwerte
+#   - Daten liegen auf tmpfs -> jeder Start beginnt mit leerer Datenbank
+#   - Ports nur an 127.0.0.1 gebunden
+name: pl2-hfh-e2e
+
+services:
+  app-db:
+    # Gleiches Image wie im Produktivbetrieb (../docker-compose.yml),
+    # geprueft durch tests/test_e2e_compose.py.
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: pflegedb_e2e
+      POSTGRES_USER: pl2
+      # Kein Geheimnis: die Datenbank ist nur lokal und nur waehrend des
+      # Testlaufs erreichbar und enthaelt ausschliesslich Testdaten.
+      POSTGRES_PASSWORD: e2e
+    tmpfs:
+      - /var/lib/postgresql/data
+    volumes:
+      # Dasselbe Schema wie produktiv (centers, services, center_services).
+      - ../db/init:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "127.0.0.1:55432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pl2 -d pflegedb_e2e"]
+      interval: 2s
+      timeout: 3s
+      retries: 30

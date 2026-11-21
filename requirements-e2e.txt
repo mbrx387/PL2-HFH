@@ -1,0 +1,7 @@
+# Abhaengigkeiten fuer die End-to-End-Tests (Playwright, siehe e2e/).
+# Bewusst getrennt von requirements-dev.txt: der normale Test-Job in CI
+# braucht weder Playwright noch Browser.
+-r requirements-dev.txt
+playwright==1.65.2
+pytest-playwright==0.10.0
+pytest-html==4.2.0

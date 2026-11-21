@@ -1,0 +1,78 @@
+# End-to-End-Tests mit Playwright (siehe e2e/ und README.md, Abschnitt 7).
+# Laeuft komplett isoliert auf dem Runner: eigene Test-Datenbank (Docker,
+# tmpfs), App per uvicorn, Chromium headless. Keine Secrets, kein Zugriff auf
+# den Server oder produktive Daten.
+name: E2E (Playwright)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "app/**"
+      - "db/**"
+      - "e2e/**"
+      - "keycloak/**"
+      - "requirements*.txt"
+      - ".github/workflows/playwright.yml"
+  pull_request:
+    paths:
+      - "app/**"
+      - "db/**"
+      - "e2e/**"
+      - "keycloak/**"
+      - "requirements*.txt"
+      - ".github/workflows/playwright.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies / Abhaengigkeiten installieren
+        run: pip install -r app/requirements.txt -r requirements-e2e.txt
+
+      - name: Install Playwright browser / Browser installieren
+        run: python -m playwright install --with-deps chromium
+
+      - name: Start test database / Test-Datenbank starten
+        run: docker compose -f e2e/docker-compose.e2e.yml up -d --wait
+
+      # Startet die App selbst (e2e/conftest.py: run_app.py, Warten auf
+      # /healthz, Log nach build/e2e-app.log) - derselbe Weg wie lokal.
+      - name: Run Playwright tests / Tests ausfuehren
+        run: pytest e2e
+
+      - name: Upload report and traces / Report und Traces hochladen
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            playwright-report/
+            test-results/
+            build/e2e-app.log
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Stop test database / Test-Datenbank stoppen
+        if: always()
+        run: |
+          docker compose -f e2e/docker-compose.e2e.yml logs --tail=50
+          docker compose -f e2e/docker-compose.e2e.yml down -v
