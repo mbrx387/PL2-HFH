@@ -42,6 +42,8 @@ const VIEWS = {
 };
 
 const canEdit = document.body.dataset.canEdit === "true";
+/*getrennte Frontend-Berechtigung für Benutzerverwaltung*/
+const canManageUsers = document.body.dataset.canManageUsers === "true";
 const $ = (id) => document.getElementById(id);
 
 const state = {
@@ -125,7 +127,7 @@ function setMessage(node, text, kind) {
 /* ------------------------------------------------------------------ */
 
 function showView(name) {
-   if (!VIEWS[name] || ((name === "datenpflege" || name === "benutzer") && !canEdit)) {
+  if (!VIEWS[name] || (name === "datenpflege" && !canEdit) || (name === "benutzer" && !canManageUsers)) {
     name = "einrichtungen";
   }
 
@@ -147,11 +149,11 @@ function showView(name) {
     history.replaceState(null, "", `#${name}`);
   }
   if (name === "email") renderEmailRecipients();
-// Beim Öffnen der Historie oder des Dashboards die
-  // dokumentierten E-Mail-Übergaben aus PR#47 laden.
+// Beim Öffnen der Historie oder des Dashboards die dokumentierten E-Mail-Übergaben aus PR#47 laden.
   if (name === "historie" || name === "dashboard") loadMailHistory();
-  
- if (name === "benutzer" && canEdit) loadUsers();
+
+// Benutzerdaten nur bei Admin-Berechtigung laden
+ if (name === "benutzer" && canManageUsers) loadUsers();
   window.scrollTo(0, 0);
 }
 
