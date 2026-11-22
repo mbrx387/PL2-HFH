@@ -746,6 +746,39 @@ async function loadUsers() {
         }
       });
 
+    //  Gruppenwechsel in der Benutzerliste
+    const groupSelect = el("select");
+    for (const group of ["Lesend", "Redaktion", "Admins"]) {
+      const option = el("option", null, group);
+        option.value = group;
+           groupSelect.appendChild(option);
+         }
+        if (user.group) groupSelect.value = user.group;
+       else groupSelect.selectedIndex = -1; // Keine eindeutige App-Gruppe
+        groupSelect.disabled = Boolean(user.is_self) || user.group === "Admins";
+  
+       const saveGroupButton = el("button", "secondary-button", "Gruppe speichern");
+      saveGroupButton.type = "button";
+       saveGroupButton.disabled = groupSelect.disabled;
+       saveGroupButton.addEventListener("click", async () => {
+       if (!groupSelect.value || groupSelect.value === user.group) return;
+        if (!confirm(`Gruppe für „${user.username}“ ändern?`)) return;
+        saveGroupButton.disabled = true;
+         try {
+           await api(`/api/admin/users/${encodeURIComponent(user.id)}/group`, {
+            method: "PUT",
+             headers: { "Content-Type": "application/json", "X-CSRF-Token": adminCsrf },
+              body: JSON.stringify({ group: groupSelect.value }),
+           });
+             await loadUsers();
+           } catch (error) {
+             setMessage(message, `Gruppe konnte nicht geändert werden: ${error.message}`, "error");
+            saveGroupButton.disabled = false;
+           }
+        });
+         actions.appendChild(groupSelect);
+       actions.appendChild(saveGroupButton);
+      
       actions.appendChild(button);
       row.appendChild(actions);
       table.appendChild(row);
