@@ -73,8 +73,8 @@ class Settings(BaseSettings):
     oidc_issuer_internal: str | None = None
 
     #eingeschraenkter Keycloak-Service-Account
-     keycloak_admin_client_id: str = "pflege-finder-admin"
-     keycloak_admin_client_secret: str | None = None
+    keycloak_admin_client_id: str = "pflege-finder-admin"
+    keycloak_admin_client_secret: str | None = None
     
     @property
     def allowed_origins_list(self) -> list[str]:
