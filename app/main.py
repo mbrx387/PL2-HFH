@@ -17,6 +17,7 @@ from app.config import get_settings
 from app.database import engine
 from app.mail_models import ensure_mail_history_table
 from app.routers import centers, mail
+from app.routers import admin
 from app.security import SecurityHeadersMiddleware
 
 settings = get_settings()
@@ -114,6 +115,7 @@ app.add_middleware(
 app.include_router(auth_router)
 app.include_router(centers.router)
 app.include_router(mail.router)
+app.include_router(admin.router)
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 templates = Jinja2Templates(directory="app/templates")
 
@@ -148,6 +150,7 @@ def index(request: Request):
     # Nur fuer die Anzeige (Menuepunkt "Datenpflege" ein-/ausblenden); die
     # eigentliche Pruefung passiert serverseitig in require_permission().
     can_edit = has_permission(user, "write_centers") if settings.auth_enabled else True
+    can_manage_users = has_permission(user, "manage_users") if settings.auth_enabled else True
     roles = (user or {}).get("roles") or []
     role_label = next((ROLE_LABELS[r] for r in ("admin", "editor", "reader") if r in roles), "")
     return templates.TemplateResponse(
