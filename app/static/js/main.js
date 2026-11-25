@@ -41,7 +41,6 @@ const VIEWS = {
   benutzer: { title: "Benutzerverwaltung", desc: "Benutzerkonten verwalten." },
 };
 
-const canEdit = document.body.dataset.canEdit === "true";
 /*getrennte Frontend-Berechtigung für Benutzerverwaltung*/
 const canEdit =
   document.body.dataset.canEdit === "true";
