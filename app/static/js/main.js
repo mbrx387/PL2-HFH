@@ -751,20 +751,23 @@ async function loadUsers() {
 
     //  Gruppenwechsel in der Benutzerliste
     const groupSelect = el("select");
+   const noGroup = el("option", null, "Keine Gruppe");
+    noGroup.value = "";
+    groupSelect.appendChild(noGroup);
     for (const group of ["Lesend", "Redaktion", "Admins"]) {
       const option = el("option", null, group);
         option.value = group;
            groupSelect.appendChild(option);
          }
-        if (user.group) groupSelect.value = user.group;
-       else groupSelect.selectedIndex = -1; // Keine eindeutige App-Gruppe
+        groupSelect.value = user.group || "";
         groupSelect.disabled = Boolean(user.is_self) || user.group === "Admins";
   
        const saveGroupButton = el("button", "secondary-button", "Gruppe speichern");
       saveGroupButton.type = "button";
        saveGroupButton.disabled = groupSelect.disabled;
        saveGroupButton.addEventListener("click", async () => {
-       if (!groupSelect.value || groupSelect.value === user.group) return;
+       const selectedGroup = groupSelect.value || null;
+       if (selectedGroup === user.group) return;
         if (!confirm(`Gruppe für „${user.username}“ ändern?`)) return;
         saveGroupButton.disabled = true;
          try {
