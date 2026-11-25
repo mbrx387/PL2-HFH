@@ -125,6 +125,35 @@ for pair in "Lesend:reader" "Redaktion:editor" "Admins:admin"; do
   kc add-roles -r "$REALM" --gname "$group" --cclientid "$CLIENT_ID" --rolename "$role"
 done
 
+if [ "$REALM" != "hfh-pflege" ]; then
+  echo "Admin-Client nur im App-Realm erlaubt" >&2
+  exit 1
+fi
+ADMIN_CLIENT_ID=pflege-finder-admin
+ADMIN_CID="$(first_id clients -r "$REALM" -q "clientId=$ADMIN_CLIENT_ID")"
+if [ -z "$ADMIN_CID" ]; then
+  kc create clients -r "$REALM" -s "clientId=$ADMIN_CLIENT_ID" \
+    -s protocol=openid-connect -s publicClient=false \
+    -s serviceAccountsEnabled=true -s standardFlowEnabled=false \
+    -s directAccessGrantsEnabled=false -s fullScopeAllowed=false
+  ADMIN_CID="$(first_id clients -r "$REALM" -q "clientId=$ADMIN_CLIENT_ID")"
+fi
+[ -n "$ADMIN_CID" ]
+kc update "clients/$ADMIN_CID" -r "$REALM" -s enabled=true \
+  -s publicClient=false -s clientAuthenticatorType=client-secret \
+  -s standardFlowEnabled=false -s implicitFlowEnabled=false \
+  -s directAccessGrantsEnabled=false -s serviceAccountsEnabled=true \
+  -s fullScopeAllowed=false
+SERVICE_UID="$(first_id users -r "$REALM" -q "username=service-account-$ADMIN_CLIENT_ID" -q exact=true)"
+MANAGEMENT_CID="$(first_id clients -r "$REALM" -q clientId=realm-management)"
+[ -n "$SERVICE_UID" ] && [ -n "$MANAGEMENT_CID" ] || exit 1
+for role in view-users manage-users query-groups; do
+  kc add-roles -r "$REALM" --uid "$SERVICE_UID" --cclientid realm-management --rolename "$role"
+  ROLE_JSON="$(kc get "clients/$MANAGEMENT_CID/roles/$role" -r "$REALM")"
+  printf '[%s]\n' "$ROLE_JSON" | kc create \
+    "clients/$ADMIN_CID/scope-mappings/clients/$MANAGEMENT_CID" -r "$REALM" -f -
+done
+
 if [ "$DELETE_DEMO" = true ]; then
   echo "== Demo-Konto loeschen"
   DEMO_ID="$(first_id users -r "$REALM" -q username=demo -q exact=true)"
