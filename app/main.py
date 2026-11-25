@@ -109,7 +109,7 @@ app.add_middleware(
     secret_key=settings.secret_key,
     same_site="lax",
     https_only=settings.is_production,
-    max_age=60 * 60 * 8,  # 8 Stunden
+    max_age=60 * 30,  # 30 Minuten
 )
 
 app.include_router(auth_router)
@@ -151,7 +151,7 @@ def index(request: Request):
     # eigentliche Pruefung passiert serverseitig in require_permission().
     can_edit = has_permission(user, "write_centers") if settings.auth_enabled else True
     # Eigene Berechtigung für Benutzerverwaltung
-    can_manage_users = has_permission(user, "manage_users") if settings.auth_enabled else True
+    can_manage_users = settings.auth_enabled and has_permission(user, "manage_users")
     # CSRF-Token pro Sitzung, nur fuer Admin-Formulare
     import secrets
     if can_manage_users and 'admin_csrf' not in request.session:
