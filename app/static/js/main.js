@@ -47,6 +47,8 @@ const canEdit =
   document.body.dataset.canEdit === "true";
 const canManageUsers =
   document.body.dataset.canManageUsers === "true";
+// Token fuer schreibende Admin-API-Aufrufe
+const adminCsrf = document.body.dataset.adminCsrf || "";
 const $ = (id) => document.getElementById(id);
 
 const state = {
@@ -737,6 +739,8 @@ async function loadUsers() {
         try {
           await api(`/api/admin/users/${encodeURIComponent(user.id)}/enabled`, {
             method: "PUT",
+            // CSRF-Schutz
+            headers: { "Content-Type": "application/json", "X-CSRF-Token": adminCsrf },
             body: JSON.stringify({ enabled: !user.enabled }),
           });
           await loadUsers();
@@ -778,7 +782,23 @@ async function loadUsers() {
         });
          actions.appendChild(groupSelect);
        actions.appendChild(saveGroupButton);
-      
+        for (const [endpoint, label] of [["logout", "Sitzungen beenden"], ["reset-otp", "OTP zurücksetzen"]]) {
+        const action = el("button", "secondary-button", label);
+        action.type = "button";
+        action.addEventListener("click", async () => {
+          if (!confirm(`${label}: ${user.username}?`)) return;
+          action.disabled = true;
+          try {
+            await api(`/api/admin/users/${encodeURIComponent(user.id)}/${endpoint}`, {
+              method: "POST", headers: {"X-CSRF-Token": adminCsrf},
+            });
+            setMessage(message, "Aktion in Keycloak ausgeführt.", "success");
+          } catch (error) { setMessage(message, error.message, "error"); }
+          finally { action.disabled = false; }
+        });
+        actions.appendChild(action);
+      }
+    
       actions.appendChild(button);
       row.appendChild(actions);
       table.appendChild(row);
@@ -803,6 +823,8 @@ async function createUser(event) {
   try {
     await api("/api/admin/users", {
       method: "POST",
+      // CSRF-Schutz
+      headers: { "Content-Type": "application/json", "X-CSRF-Token": adminCsrf },
       body: JSON.stringify({
         username: $("user-username").value.trim(),
         email: $("user-email").value.trim(),
