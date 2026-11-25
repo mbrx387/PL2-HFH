@@ -774,7 +774,7 @@ async function loadUsers() {
            await api(`/api/admin/users/${encodeURIComponent(user.id)}/group`, {
             method: "PUT",
              headers: { "Content-Type": "application/json", "X-CSRF-Token": adminCsrf },
-              body: JSON.stringify({ group: groupSelect.value }),
+              body: JSON.stringify({ group: selectedGroup }),
            });
              await loadUsers();
            } catch (error) {
