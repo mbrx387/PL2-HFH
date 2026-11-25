@@ -41,7 +41,13 @@ const VIEWS = {
   benutzer: { title: "Benutzerverwaltung", desc: "Benutzerkonten verwalten." },
 };
 
-const canEdit = document.body.dataset.canEdit === "true";
+/*getrennte Frontend-Berechtigung für Benutzerverwaltung*/
+const canEdit =
+  document.body.dataset.canEdit === "true";
+const canManageUsers =
+  document.body.dataset.canManageUsers === "true";
+// Token fuer schreibende Admin-API-Aufrufe
+const adminCsrf = document.body.dataset.adminCsrf || "";
 const $ = (id) => document.getElementById(id);
 
 const state = {
@@ -125,7 +131,7 @@ function setMessage(node, text, kind) {
 /* ------------------------------------------------------------------ */
 
 function showView(name) {
-   if (!VIEWS[name] || ((name === "datenpflege" || name === "benutzer") && !canEdit)) {
+  if (!VIEWS[name] || (name === "datenpflege" && !canEdit) || (name === "benutzer" && !canManageUsers)) {
     name = "einrichtungen";
   }
 
@@ -147,11 +153,11 @@ function showView(name) {
     history.replaceState(null, "", `#${name}`);
   }
   if (name === "email") renderEmailRecipients();
-// Beim Öffnen der Historie oder des Dashboards die
-  // dokumentierten E-Mail-Übergaben aus PR#47 laden.
+// Beim Öffnen der Historie oder des Dashboards die dokumentierten E-Mail-Übergaben aus PR#47 laden.
   if (name === "historie" || name === "dashboard") loadMailHistory();
-  
- if (name === "benutzer" && canEdit) loadUsers();
+
+// Benutzerdaten nur bei Admin-Berechtigung laden
+ if (name === "benutzer" && canManageUsers) loadUsers();
   window.scrollTo(0, 0);
 }
 
@@ -732,6 +738,8 @@ async function loadUsers() {
         try {
           await api(`/api/admin/users/${encodeURIComponent(user.id)}/enabled`, {
             method: "PUT",
+            // CSRF-Schutz
+            headers: { "Content-Type": "application/json", "X-CSRF-Token": adminCsrf },
             body: JSON.stringify({ enabled: !user.enabled }),
           });
           await loadUsers();
@@ -741,6 +749,58 @@ async function loadUsers() {
         }
       });
 
+    //  Gruppenwechsel in der Benutzerliste
+    const groupSelect = el("select");
+   const noGroup = el("option", null, "Keine Gruppe");
+    noGroup.value = "";
+    groupSelect.appendChild(noGroup);
+    for (const group of ["Lesend", "Redaktion", "Admins"]) {
+      const option = el("option", null, group);
+        option.value = group;
+           groupSelect.appendChild(option);
+         }
+        groupSelect.value = user.group || "";
+        groupSelect.disabled = Boolean(user.is_self) || user.group === "Admins";
+  
+       const saveGroupButton = el("button", "secondary-button", "Gruppe speichern");
+      saveGroupButton.type = "button";
+       saveGroupButton.disabled = groupSelect.disabled;
+       saveGroupButton.addEventListener("click", async () => {
+       const selectedGroup = groupSelect.value || null;
+       if (selectedGroup === user.group) return;
+        if (!confirm(`Gruppe für „${user.username}“ ändern?`)) return;
+        saveGroupButton.disabled = true;
+         try {
+           await api(`/api/admin/users/${encodeURIComponent(user.id)}/group`, {
+            method: "PUT",
+             headers: { "Content-Type": "application/json", "X-CSRF-Token": adminCsrf },
+              body: JSON.stringify({ group: selectedGroup }),
+           });
+             await loadUsers();
+           } catch (error) {
+             setMessage(message, `Gruppe konnte nicht geändert werden: ${error.message}`, "error");
+            saveGroupButton.disabled = false;
+           }
+        });
+         actions.appendChild(groupSelect);
+       actions.appendChild(saveGroupButton);
+        for (const [endpoint, label] of [["logout", "Sitzungen beenden"], ["reset-otp", "OTP zurücksetzen"]]) {
+        const action = el("button", "secondary-button", label);
+        action.type = "button";
+        action.addEventListener("click", async () => {
+          if (!confirm(`${label}: ${user.username}?`)) return;
+          action.disabled = true;
+          try {
+            await api(`/api/admin/users/${encodeURIComponent(user.id)}/${endpoint}`, {
+              method: "POST", headers: {"X-CSRF-Token": adminCsrf},
+            });
+            setMessage(message, "Aktion in Keycloak ausgeführt.", "success");
+          } catch (error) { setMessage(message, error.message, "error"); }
+          finally { action.disabled = false; }
+        });
+        actions.appendChild(action);
+      }
+    
       actions.appendChild(button);
       row.appendChild(actions);
       table.appendChild(row);
@@ -765,6 +825,8 @@ async function createUser(event) {
   try {
     await api("/api/admin/users", {
       method: "POST",
+      // CSRF-Schutz
+      headers: { "Content-Type": "application/json", "X-CSRF-Token": adminCsrf },
       body: JSON.stringify({
         username: $("user-username").value.trim(),
         email: $("user-email").value.trim(),
@@ -788,7 +850,7 @@ async function createUser(event) {
 
 function bindEvents() {
  // Admin-Funktionen nur binden, wenn der Bereich vorhanden ist.
-  if (canEdit) {
+  if (canManageUsers) {
     const userForm = $("user-create-form");
     const usersRefresh = $("users-refresh");
     if (userForm) userForm.addEventListener("submit", createUser);

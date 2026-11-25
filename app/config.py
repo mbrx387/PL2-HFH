@@ -72,6 +72,10 @@ class Settings(BaseSettings):
     # Docker-Netzwerk-Trennung). Siehe app/auth.py.
     oidc_issuer_internal: str | None = None
 
+    #eingeschraenkter Keycloak-Service-Account
+    keycloak_admin_client_id: str = "pflege-finder-admin"
+    keycloak_admin_client_secret: str | None = None
+    
     @property
     def allowed_origins_list(self) -> list[str]:
         return [o.strip() for o in self.allowed_origins.split(",") if o.strip()]

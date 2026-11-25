@@ -102,6 +102,21 @@
         "pkce.code.challenge.method": "S256"
       },
       "fullScopeAllowed": false
+   },
+    {
+      "clientId": "pflege-finder-admin",
+      "description": "Service Account",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "fullScopeAllowed": false,
+      "redirectUris": [],
+      "webOrigins": []
     }
   ]
 }

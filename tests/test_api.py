@@ -50,15 +50,31 @@ def test_index_shows_data_maintenance_only_for_editors(make_app, monkeypatch, ro
 
     async def authorize_access_token(request):
         return {
-            "userinfo": {"sub": "u", "email": "u@example.org", "name": "Test Person", "roles": [role]},
+            "userinfo": {
+                "sub": "u",
+                "email": "u@example.org",
+                "name": "Test Person",
+                "roles": [role],
+                "sid": "test-session-id",
+            },
             "id_token": "t",
         }
 
     monkeypatch.setattr(oauth.keycloak, "authorize_access_token", authorize_access_token)
 
+    async def mock_validate_keycloak_session(user):
+        return bool(user.get("sub") and user.get("sid"))
+
+    monkeypatch.setattr(
+        "app.auth.validate_keycloak_session",
+        mock_validate_keycloak_session,
+    )
+
     with TestClient(app) as role_client:
-        role_client.get("/auth/callback", follow_redirects=False)
-        page = role_client.get("/").text
+        assert role_client.get("/auth/callback", follow_redirects=False).status_code == 307
+        response = role_client.get("/", follow_redirects=False)
+        assert response.status_code == 200
+        page = response.text
 
     assert ('id="view-datenpflege"' in page) is shows_editor
     assert (f'data-can-edit="{"true" if shows_editor else "false"}"') in page
@@ -185,11 +201,24 @@ def test_api_enforces_roles_after_oidc_login(make_app, monkeypatch, role, write_
 
     async def authorize_access_token(request):
         return {
-            "userinfo": {"sub": "test-user", "email": "test@example.org", "roles": [role]},
+            "userinfo": {
+                "sub": "test-user",
+                "email": "test@example.org",
+                "roles": [role],
+                "sid": "test-session-id",
+            },
             "id_token": "test-id-token",
         }
 
     monkeypatch.setattr(oauth.keycloak, "authorize_access_token", authorize_access_token)
+
+    async def mock_validate_keycloak_session(user):
+        return bool(user.get("sub") and user.get("sid"))
+
+    monkeypatch.setattr(
+        "app.auth.validate_keycloak_session",
+        mock_validate_keycloak_session,
+    )
 
     with TestClient(app) as role_client:
         assert role_client.get("/auth/callback", follow_redirects=False).status_code == 307

@@ -11,8 +11,10 @@
     <script src="/static/js/main.js?v={{ asset_version }}" defer></script>
 </head>
 
-    <!-- Berechtigung editor/admin für Benutzerverwaltung -->
-<body data-can-edit="{{ 'true' if can_edit else 'false' }}">
+    <!-- getrennte Rechte für Datenpflege und Benutzerverwaltung sowie CSRF-Schutz für die Benutzerverwaltung -->
+<body data-can-edit="{{ 'true' if can_edit else 'false' }}"
+      data-can-manage-users="{{ 'true' if can_manage_users else 'false' }}"
+       data-admin-csrf="{{ admin_csrf }}">
     <div class="workspace">
 
         <!-- Linke Navigation -->
@@ -50,7 +52,8 @@
                     <span class="nav-icon" aria-hidden="true">◷</span>
                     Versandhistorie
                 </a>
-                 {% if can_edit %}
+                <!--Menüpunkt nur für admin -->
+                 {% if can_manage_users %}
                 <a href="#benutzer" class="nav-link" data-view="benutzer">
                     <span class="nav-icon" aria-hidden="true">♙</span>
                     Benutzer
@@ -63,6 +66,7 @@
                 <div>
                     {% if user %}
                     <span class="sidebar-user">{{ user.name or user.email or user.sub }}</span>
+                    {% if account_url %}<a href="{{ account_url }}" class="sidebar-logout">Mein Konto</a>{% endif %}
                     <a href="/auth/logout" class="sidebar-logout">Abmelden</a>
                     {% else %}
                     <span class="sidebar-user">Ohne Anmeldung (Entwicklung)</span>
@@ -398,7 +402,6 @@
                 </div>
 
                 <section class="directory-panel">
-                    <!-- GEÄNDERT AP6: Historie aus AP5-PR#47 statt statischem Platzhalter. -->
                      <p id="mail-history-message" class="form-message" role="status" aria-live="polite">Historie wird geladen ...</p>
 
 
@@ -412,20 +415,35 @@
                                     <th scope="col">Status</th>
                                 </tr>
                             </thead>
-                            <!-- NEU AP6: Daten aus GET /api/mail-history. -->
                             <tbody id="mail-history-body"></tbody>
                         </table>
                     </div>
                 </section>
             </section>
 
-                        <!-- Keycloak-Benutzerverwaltung, nur für editor/admins -->
-        {% if can_edit %}
+                        <!-- Keycloak-Benutzerverwaltung, nur für admins -->
+        {% if can_manage_users %}
             <section class="page-view" id="view-benutzer" hidden>
                 <div class="section-heading"><div>
                     <h2>Benutzerverwaltung</h2>
                     <p>Benutzerkonten und Zugriffsgruppen in Keycloak verwalten.</p>
                 </div></div>
+
+                <!--verständliche Erklärung der drei App-Rollen -->
+                <section class="directory-panel" aria-labelledby="user-roles-heading">
+                    <h3 id="user-roles-heading">Welche Benutzerrollen gibt es?</h3>
+                    <p class="field-help">Jedes Konto gehört genau einer Zugriffsgruppe an. Die Rolle legt fest, welche Funktionen im Pflegezentren-Finder verwendet werden dürfen.</p>
+                    <dl>
+                        <dt><strong>Lesend (reader)</strong></dt>
+                        <dd>Kann Einrichtungen ansehen, suchen und filtern, E-Mails vorbereiten und die Versandhistorie einsehen. Einrichtungen und Benutzerkonten können nicht verändert werden.</dd>
+                        <dt><strong>Redaktion (editor)</strong></dt>
+                        <dd>Besitzt alle Leserechte und kann zusätzlich Einrichtungen anlegen, bearbeiten und deaktivieren. Die Verwaltung von Benutzerkonten ist nicht erlaubt.</dd>
+                        <dt><strong>Administration (admin)</strong></dt>
+                        <dd>Besitzt alle Rechte der Redaktion und darf zusätzlich Benutzerkonten verwalten, Zugriffsgruppen zuweisen und Konten sperren oder entsperren</dd>
+                    </dl>
+                    <p class="field-help"><strong>Wichtig:</strong> Die Benutzerverwaltung ist ausschließlich für Administratoren vorgesehen. Berechtigungen werden auch auf dem Server geprüft. </p>
+                </section>
+                
                 <section class="directory-panel">
                     <h3>Benutzer anlegen</h3>
                     <p class="field-help">Das Startpasswort ist temporär und muss bei der ersten Anmeldung geändert werden.</p>
@@ -442,14 +460,15 @@
                 </section>
              <section class="directory-panel">
                     <div class="results-header"><h3>Benutzerkonten</h3><button type="button" class="secondary-button" id="users-refresh">Aktualisieren</button></div>
-                    <!-- NEU AP6: Live-Suche nach Benutzername oder E-Mail für admin und editor -->
+                    <!-- Live-Suche nach Benutzername oder E-Mail für admin und editor -->
                     <div class="form-field">
                         <label for="users-search">Benutzer suchen</label>
                         <input type="search" id="users-search" placeholder="Benutzername oder E-Mail eingeben ..." autocomplete="off">
                     </div>
                     <p id="users-list-message" role="status"></p>
                     <div class="table-wrapper"><table class="history-table"><thead><tr><th>Benutzername</th><th>E-Mail</th><th>Status</th><th>Aktion</th></tr></thead><tbody id="users-table-body"></tbody></table></div>
-                </section>
+                     <th>Status</th><th>Gruppe / Aktion</th>   
+                 </section>
             </section>
             {% endif %}
             
@@ -491,9 +510,9 @@
                     <article class="overview-card">
                         <span class="overview-icon" aria-hidden="true">◷</span>
                         <p>Versandhistorie</p>
-                       <!-- NEU AP6: AP5-Historienanzahl nach dem Laden. -->
+                       <!-- Historienanzahl nach dem Laden. -->
                         <strong id="dashboard-history-count">–</strong>
-                        <span class="overview-description">Dokumentierte Mailprogramm-Uebergaben</span>
+                        <span class="overview-description">Dokumentierte Mailprogramm-Übergaben</span>
                     </article>
                 </div>
 
@@ -564,7 +583,6 @@
                         <p>Welche Funktionen Ihnen zur Verfügung stehen, hängt von Ihrer Benutzerrolle ab. Wenn ein Bereich nicht angezeigt wird, fehlt möglicherweise die entsprechende Berechtigung.</p>
                     </aside>
                 </section>
-<!-- ENDE: BEDIENÜBERSICHT -->
 
 <!-- System- und Datenstatus (Start) -->
             <section class="directory-panel dashboard-status" aria-labelledby="dashboard-status-title">
@@ -582,11 +600,7 @@
                     </ul>
                     <p class="dashboard-status-note">Hinweis: Die Statusanzeige zeigt, ob das Einrichtungsverzeichnis aktuell erreichbar ist. Andere Funktionen werden nicht automatisch überprüft.</p>
                 </section>
-
-                <!-- ENDE: SYSTEM- UND DATENSTATUS -->
-
             </section>
-            <!-- ENDE: DASHBOARD / ÜBERSICHT -->
             
             <footer class="workspace-footer">
                 <span>Pflegezentren-Finder · HFH · ProjektLab 2</span>

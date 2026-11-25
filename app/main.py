@@ -16,7 +16,7 @@ from app.auth import router as auth_router
 from app.config import get_settings
 from app.database import engine
 from app.mail_models import ensure_mail_history_table
-from app.routers import centers, mail
+from app.routers import admin, centers, mail
 from app.security import SecurityHeadersMiddleware
 
 settings = get_settings()
@@ -108,12 +108,13 @@ app.add_middleware(
     secret_key=settings.secret_key,
     same_site="lax",
     https_only=settings.is_production,
-    max_age=60 * 60 * 8,  # 8 Stunden
+    max_age=60 * 30,  # 30 Minuten
 )
 
 app.include_router(auth_router)
 app.include_router(centers.router)
 app.include_router(mail.router)
+app.include_router(admin.router)
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 templates = Jinja2Templates(directory="app/templates")
 
@@ -148,6 +149,12 @@ def index(request: Request):
     # Nur fuer die Anzeige (Menuepunkt "Datenpflege" ein-/ausblenden); die
     # eigentliche Pruefung passiert serverseitig in require_permission().
     can_edit = has_permission(user, "write_centers") if settings.auth_enabled else True
+    # Eigene Berechtigung für Benutzerverwaltung
+    can_manage_users = settings.auth_enabled and has_permission(user, "manage_users")
+    # CSRF-Token pro Sitzung, nur fuer Admin-Formulare
+    import secrets
+    if can_manage_users and 'admin_csrf' not in request.session:
+        request.session['admin_csrf'] = secrets.token_urlsafe(32)
     roles = (user or {}).get("roles") or []
     role_label = next((ROLE_LABELS[r] for r in ("admin", "editor", "reader") if r in roles), "")
     return templates.TemplateResponse(
@@ -157,6 +164,15 @@ def index(request: Request):
             "app_name": settings.app_name,
             "user": user,
             "can_edit": can_edit,
+            #Berechtigung ans Template übergeben
+            "can_manage_users": can_manage_users,
+            #CSRF-Token im Template
+            "admin_csrf": request.session.get("admin_csrf", "") if can_manage_users else "",
+            "account_url": (
+                (settings.oidc_issuer or "").rstrip("/") + "/account/"
+                if settings.oidc_issuer 
+                else None,
+            ),
             "role_label": role_label if settings.auth_enabled else "Entwicklung",
         },
     )
