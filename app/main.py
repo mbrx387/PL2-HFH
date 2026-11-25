@@ -150,8 +150,12 @@ def index(request: Request):
     # Nur fuer die Anzeige (Menuepunkt "Datenpflege" ein-/ausblenden); die
     # eigentliche Pruefung passiert serverseitig in require_permission().
     can_edit = has_permission(user, "write_centers") if settings.auth_enabled else True
-    # eigene Berechtigung für Benutzerverwaltung
+    # Eigene Berechtigung für Benutzerverwaltung
     can_manage_users = has_permission(user, "manage_users") if settings.auth_enabled else True
+    # CSRF-Token pro Sitzung, nur fuer Admin-Formulare
+    import secrets
+    if can_manage_users and 'admin_csrf' not in request.session:
+        request.session['admin_csrf'] = secrets.token_urlsafe(32)
     roles = (user or {}).get("roles") or []
     role_label = next((ROLE_LABELS[r] for r in ("admin", "editor", "reader") if r in roles), "")
     return templates.TemplateResponse(
@@ -163,6 +167,9 @@ def index(request: Request):
             "can_edit": can_edit,
             #Berechtigung ans Template übergeben
             "can_manage_users": can_manage_users,
+            #CSRF-Token im Template
+            "admin_csrf": request.session.get("admin_csrf", "") if can_manage_users else "",
+            "account_url": (settings.oidc_issuer or "").rstrip("/") + "/account/" if settings.oidc_issuer else None,
             "role_label": role_label if settings.auth_enabled else "Entwicklung",
         },
     )
