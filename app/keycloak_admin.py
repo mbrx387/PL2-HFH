@@ -17,6 +17,9 @@ class KeycloakAdmin:
         if not self.base or is_placeholder(self.settings.keycloak_admin_client_secret):
             raise HTTPException(503, "Keycloak-Admin-Service-Account ist nicht konfiguriert")
 
+        if not self.base.endswith("/realms/hfh-pflege"):
+            raise HTTPException(503, "Admin-API nur im Realm hfh-pflege erlaubt")
+    
     async def __aenter__(self):
         self.http = httpx.AsyncClient(timeout=12.0, follow_redirects=False)
         try:
@@ -75,7 +78,7 @@ class KeycloakAdmin:
         return await self.request('GET', f'users/{quote(uid, safe="")}/groups', params={'max': 1000})
 
     async def set_group(self, uid, group):
-        if group not in GROUPS:
+        if group not in GROUPS and group not in GROUPS:
             raise HTTPException(422, "Ungueltige Zugriffsgruppe")
         ids = await self.groups()
         existing = await self.user_groups(uid)
