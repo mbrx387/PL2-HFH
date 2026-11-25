@@ -6,15 +6,17 @@ import re
 from urllib.parse import urlsplit
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
-from app.auth import require_permission, has_permission
+from app.auth import require_permission
 from app.config import get_settings
 from app.keycloak_admin import KeycloakAdmin, GROUPS
 
 logger = logging.getLogger(__name__)
 # niemals Admin-API ohne echte Admin-Sitzung
-async def require_admin_session(request: Request):
-    if not get_settings().auth_enabled or not has_permission(request.session.get('user'), 'manage_users'):
+async def require_admin_session(user: dict =
+    Depends(require_permission("manage_users"))):
+    if not get_settings().auth_enabled or not user:
         raise HTTPException(403, 'Admin-Anmeldung erforderlich')
+        return user
 
 router = APIRouter(prefix='/api/admin', tags=['admin'], dependencies=[Depends(require_admin_session)])
 UID_RE = re.compile(r'^[0-9a-fA-F-]{36}$')
@@ -29,7 +31,7 @@ class EnabledUpdate(BaseModel):
     enabled: bool
 
 class GroupUpdate(BaseModel):
-    group: str
+    group: str | None
 
 
 def validate_uid(uid):
@@ -85,7 +87,7 @@ async def create_user(payload: CreateUser, request: Request):
     async with KeycloakAdmin() as kc:
         await kc.groups()  # Fail-fast bei falscher Realm-Konfiguration
         await kc.request('POST', 'users', json={'username': payload.username, 'email': str(payload.email),
-            'enabled': True, 'emailVerified': False, 'requiredActions': ['UPDATE_PASSWORD', 'CONFIGURE_TOTP'],
+            'enabled': False, 'emailVerified': False, 'requiredActions': ['UPDATE_PASSWORD', 'CONFIGURE_TOTP'],
             'credentials': [{'type': 'password', 'value': payload.password, 'temporary': True}]})
         matches = await kc.request('GET', 'users', params={'username': payload.username, 'exact': 'true', 'max': 2})
         if len(matches) != 1:
@@ -93,6 +95,7 @@ async def create_user(payload: CreateUser, request: Request):
         uid = matches[0]['id']
         try:
             await kc.set_group(uid, payload.group)
+            await kc.request('PUT', f'users/{uid}', json={'enabled': True})
         except HTTPException:
             # Keine stillschweigend nutzbaren Konten ohne zugewiesene Gruppe.
             await kc.request('PUT', f'users/{uid}', json={'enabled': False})
@@ -123,7 +126,7 @@ async def update_enabled(uid: str, payload: EnabledUpdate, request: Request):
 async def update_group(uid: str, payload: GroupUpdate, request: Request):
     check_csrf(request)
     uid = validate_uid(uid)
-    if payload.group not in GROUPS:
+    if payload.group is not None and payload.group not in GROUPS:
         raise HTTPException(422, 'Ungueltige Zugriffsgruppe')
     if uid == (request.session.get('user') or {}).get('sub'):
         raise HTTPException(409, 'Eigene Gruppe kann nicht geaendert werden')
@@ -133,7 +136,7 @@ async def update_group(uid: str, payload: GroupUpdate, request: Request):
             raise HTTPException(409, 'Admin-Konten nur in der Keycloak-Konsole herabstufen')
         await kc.set_group(uid, payload.group)
         await kc.request('POST', f'users/{uid}/logout')
-    audit(request, 'set_group_' + payload.group, uid)
+    audit(request, 'set_group_' + payload.group if payload.group is not None else 'remove_group', uid)
     return {'id': uid, 'group': payload.group}
 
 @router.post('/users/{uid}/logout')
