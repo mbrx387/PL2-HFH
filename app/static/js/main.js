@@ -81,7 +81,10 @@ function debounce(fn, delay) {
 
 function formatApiError(detail) {
   if (!detail) return "Unbekannter Fehler.";
-  if (typeof detail === "string") return detail;
+  if (typeof detail === "string") {
+    const translations = {"Center not found": "Einrichtung nicht gefunden.", "A center with this ID already exists": "Diese ID ist bereits vergeben."};
+    return translations[detail] || (detail.startsWith("Unknown services:") ? "Unbekannte Beratungsangebote." : detail);
+  }
   if (Array.isArray(detail)) {
     return detail
       .map((d) => `${(d.loc || []).slice(-1)[0] || "Feld"}: ${d.msg || "ungültig"}`)
@@ -184,6 +187,7 @@ async function loadBundeslaender() {
 
 function buildQuery() {
   const params = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(state.offset) });
+   if (canEdit && $("show-inactive").checked) params.set("aktiv", "false");
   if (state.search) params.set("search", state.search);
   if (state.angebot) params.set("angebot", state.angebot);
   if (state.bundesland) params.set("bundesland", state.bundesland);
@@ -232,7 +236,7 @@ function renderCard(center) {
   const checkbox = el("input");
   checkbox.type = "checkbox";
   checkbox.checked = state.selected.has(center.id);
-  checkbox.disabled = !center.email;
+   checkbox.disabled = !center.email || center.aktiv === false || (canEdit && $("show-inactive").checked);
   checkbox.setAttribute("aria-label", `${center.name || "Einrichtung"} auswählen`);
   checkbox.addEventListener("change", () => toggleSelection(center, checkbox.checked));
   select.appendChild(checkbox);
@@ -240,6 +244,8 @@ function renderCard(center) {
 
   const body = el("div", "card-body");
   body.appendChild(el("h3", null, center.name || "(ohne Namen)"));
+  if (canEdit && center.manuell_gepflegt === true) body.appendChild(el("p", "field-help", "Manuell gepflegt"));
+  if (center.aktiv === false) body.appendChild(el("p", "field-help", "Deaktiviert"));
 
   const place = [center.adresse, [center.plz, center.ort].filter(Boolean).join(" "), landName(center.bundesland)]
     .filter(Boolean)
@@ -301,7 +307,7 @@ function updateSelectionUi() {
 
 function selectVisible() {
   for (const center of state.items) {
-    if (center.email) state.selected.set(center.id, { name: center.name, email: center.email });
+     if (center.email && center.aktiv !== false && !(canEdit && $("show-inactive").checked)) state.selected.set(center.id, { name: center.name, email: center.email });
   }
   renderResults();
   updateSelectionUi();
@@ -553,9 +559,14 @@ function openCenterForm(center) {
   const isEdit = Boolean(center);
   $("center-form-title").textContent = isEdit ? "Einrichtung bearbeiten" : "Einrichtung anlegen";
   $("center-edit-id").value = isEdit ? String(center.id) : "";
-  $("center-id-field").hidden = isEdit;
-  $("deactivate-center").hidden = !isEdit;
-  $("etl-notice").hidden = !(isEdit && center.id < MANUAL_ID_START);
+  $("center-id-display").textContent = isEdit ? `ID: ${center.id}` : "Die ID wird automatisch vergeben.";
+  $("deactivate-center").hidden = !isEdit || center.aktiv === false;
+  $("reactivate-center").hidden = !isEdit || center.aktiv !== false;
+  $("save-center").hidden = isEdit && center.aktiv === false;
+  $("etl-notice").hidden = !isEdit;
+  $("unlock-center").hidden = !isEdit || center.manuell_gepflegt !== true || center.id >= MANUAL_ID_START;
+  $("manual-status").textContent = !isEdit ? "" : center.manuell_gepflegt === true ? "Manuell gepflegt – Importschutz aktiv" : center.manuell_gepflegt === false ? "Automatischer Import – kein Importschutz" : "Importschutzstatus nicht verfügbar";
+  $("manual-details").textContent = isEdit && center.manuell_gepflegt === true ? `Letzte manuelle Änderung: ${center.manuell_geaendert_von || "unbekannt"} · ${center.manuell_geaendert_am ? new Date(center.manuell_geaendert_am).toLocaleString("de-DE") : "unbekannt"}` : "";
 
   if (isEdit) {
     $("center-name").value = center.name || "";
@@ -571,7 +582,34 @@ function openCenterForm(center) {
     });
   }
   showView("datenpflege");
-  (isEdit ? $("center-name") : $("center-id")).focus();
+   $("center-name").focus();
+}
+
+async function unlockCenter() {
+  const center = state.editing;
+  if (!center || center.id >= MANUAL_ID_START || center.manuell_gepflegt !== true) return;
+  if (!confirm("Importschutz aufheben? Beim nächsten Import können manuelle Änderungen überschrieben werden.")) return;
+  try {
+    await api(`/api/centers/${center.id}/manual-lock`, { method: "DELETE" });
+    openCenterForm(null);
+    showView("einrichtungen");
+    await loadCenters();
+  } catch (error) { setMessage($("center-form-message"), error.message, "error"); }
+}
+
+async function reactivateCenter() {
+  if (!state.editing || state.editing.aktiv !== false) return;
+  if (!confirm("Einrichtung wieder aktivieren?")) return;
+  // PUT aktiviert laut bestehender API wieder; gespeicherte Werte statt ungespeicherter Eingaben verwenden.
+  const center = state.editing;
+  openCenterForm(center);
+  try {
+    const saved = await api(`/api/centers/${center.id}`, { method: "PUT", body: JSON.stringify(collectPayload()) });
+    openCenterForm(saved);
+    setMessage($("center-form-message"), "Einrichtung wieder aktiviert.", "success");
+    await loadCenters();
+    loadDashboardCount();
+  } catch (error) { setMessage($("center-form-message"), error.message, "error"); }
 }
 
 function extraServices(center) {
@@ -606,12 +644,8 @@ function collectPayload() {
 }
 
 function validatePayload(payload, isEdit) {
-  if (!isEdit) {
-    const id = Number($("center-id").value);
-    if (!Number.isInteger(id) || id < MANUAL_ID_START) {
-      return `Bitte eine ganzzahlige ID ab ${MANUAL_ID_START.toLocaleString("de-DE")} angeben.`;
-    }
-  }
+ // Die ID wird ausschließlich vom Server vergeben.
+
   if (!payload.name) return "Bitte den Namen der Einrichtung angeben.";
   if (!/^\d{5}$/.test(payload.plz)) return "Die Postleitzahl muss aus genau 5 Ziffern bestehen.";
   if (!payload.ort) return "Bitte die Stadt oder Gemeinde angeben.";
@@ -636,12 +670,10 @@ async function saveCenter(event) {
   const button = $("save-center");
   button.disabled = true;
   try {
-    if (isEdit) {
-      await api(`/api/centers/${state.editing.id}`, { method: "PUT", body: JSON.stringify(payload) });
-    } else {
-      payload.id = Number($("center-id").value);
-      await api("/api/centers", { method: "POST", body: JSON.stringify(payload) });
-    }
+  const saved = await api(isEdit ? `/api/centers/${state.editing.id}` : "/api/centers", {
+      method: isEdit ? "PUT" : "POST", body: JSON.stringify(payload)
+    });
+    openCenterForm(saved);
     setMessage(message, isEdit ? "Änderungen gespeichert." : "Einrichtung angelegt.", "success");
     await loadCenters();
     loadDashboardCount();
@@ -804,12 +836,12 @@ function bindEvents() {
   document.querySelectorAll(".nav-link").forEach((link) => {
     link.addEventListener("click", (event) => {
       event.preventDefault();
-      if (link.dataset.view === "datenpflege" && !state.editing) openCenterForm(null);
+        if (link.dataset.view === "datenpflege" && canEdit) openCenterForm(null);
       else showView(link.dataset.view);
     });
   });
   document.querySelectorAll("[data-open-view]").forEach((button) => {
-    button.addEventListener("click", () => showView(button.dataset.openView));
+     button.addEventListener("click", () => button.dataset.openView === "datenpflege" && canEdit ? openCenterForm(null) : showView(button.dataset.openView));
   });
   window.addEventListener("hashchange", () => showView(window.location.hash.slice(1)));
 
@@ -864,6 +896,10 @@ function bindEvents() {
 
   if (canEdit) {
     renderOfferCheckboxes();
+    $("cancel-center").addEventListener("click", () => { state.editing = null; $("center-form").reset(); showView("einrichtungen"); });
+    $("show-inactive").addEventListener("change", () => { state.offset = 0; loadCenters(); });
+    $("unlock-center").addEventListener("click", unlockCenter);
+    $("reactivate-center").addEventListener("click", reactivateCenter);
     $("center-form").addEventListener("submit", saveCenter);
     $("deactivate-center").addEventListener("click", deactivateCenter);
     $("new-center").addEventListener("click", () => openCenterForm(null));
