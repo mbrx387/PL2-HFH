@@ -143,6 +143,9 @@
                             </div>
                         </div>
 
+                        {% if can_edit %}
+                        <label><input type="checkbox" id="show-inactive"> Deaktivierte anzeigen (nur deaktivierte)</label>
+                        {% endif %}
                         <div class="filter-actions">
                             <button type="submit" class="action-button">Einrichtungen suchen</button>
                             <button type="reset" class="secondary-button" id="reset-search">
@@ -211,15 +214,7 @@
                         </div>
 
                         <div class="editor-grid">
-                            <div class="form-field" id="center-id-field">
-                                <label for="center-id">Kennnummer (ID) *</label>
-                                <input id="center-id" name="id" type="number" min="1000000" step="1"
-                                       inputmode="numeric" placeholder="ab 1000000">
-                                <p class="field-help">
-                                    Manuell angelegte Einrichtungen bekommen eine ID ab 1.000.000,
-                                    damit sie nicht mit dem automatischen Datenimport kollidieren.
-                                </p>
-                            </div>
+                        <p id="center-id-display" class="field-help">Die ID wird automatisch vergeben.</p>
 
                             <div class="form-field">
                                 <label for="center-name">Name der Einrichtung *</label>
@@ -282,22 +277,18 @@
 
                         <p class="form-note">* Pflichtfelder.</p>
 
-                        <div class="notice" id="etl-notice">
-                            <strong>Hinweis zum automatischen Datenimport</strong>
-                            <p>
-                                Einrichtungen aus dem wöchentlichen Import (ID unter 1.000.000) werden
-                                dabei mit den Daten der Quelle aktualisiert. Manuelle Änderungen an
-                                diesen Datensätzen können dadurch überschrieben werden.
-                            </p>
+                        <div class="notice" id="etl-notice" hidden>
+                             <strong id="manual-status"></strong>
+                            <p id="manual-details"></p>
+                            <button type="button" class="secondary-button" id="unlock-center" hidden>Sperre aufheben</button>
                         </div>
 
                         <div class="form-actions">
                             <button type="button" class="danger-button" id="deactivate-center" hidden>
                                 Einrichtung deaktivieren
                             </button>
-                            <button type="button" class="secondary-button" data-open-view="einrichtungen">
-                                Abbrechen
-                            </button>
+                            <button type="button" class="secondary-button" id="reactivate-center" hidden>Wieder aktivieren</button>
+                            <button type="button" class="secondary-button" id="cancel-center">Abbrechen</button>
                             <button type="submit" class="action-button" id="save-center">
                                 Einrichtung speichern
                             </button>
