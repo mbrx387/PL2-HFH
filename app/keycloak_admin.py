@@ -3,8 +3,10 @@
 
 import logging
 from urllib.parse import quote
+
 import httpx
 from fastapi import HTTPException
+
 from app.config import get_settings, is_placeholder
 
 logger = logging.getLogger(__name__)
