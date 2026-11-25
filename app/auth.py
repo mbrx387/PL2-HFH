@@ -136,7 +136,7 @@ async def validate_keycloak_session(user: dict) -> bool:
         user["roles"] = sorted({mapping[g["id"]] for g in groups if g.get("id") in mapping})
         return bool(user["roles"])
 
-class LoginRequiredMiddleware(BaseHTTPMiddleware):
+    class LoginRequiredMiddleware(BaseHTTPMiddleware):
     """Erzwingt einen gueltigen Keycloak-Login fuer alle uebrigen Routen.
 
     Greift nur, wenn AUTH_ENABLED=true (Default, siehe config.py) - der
