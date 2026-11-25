@@ -65,7 +65,15 @@ def audit(request, action, uid):
 @router.get('/users')
 async def list_users(request: Request):
     async with KeycloakAdmin() as kc:
-        users = await kc.request('GET', 'users', params={'max': 100, 'first': 0, 'briefRepresentation': 'true'})
+        users = await kc.request(
+            'GET', 
+            'users', 
+            params={
+                'max': 100,
+                'first': 0,
+                'briefRepresentation': 'true'
+            }
+        )
         result = []
         for u in users:
             assigned = await kc.user_groups(u['id'])
@@ -84,14 +92,47 @@ async def create_user(payload: CreateUser, request: Request):
         raise HTTPException(422, 'Ungueltige Zugriffsgruppe')
     if '@' not in payload.email or payload.email.startswith('@') or payload.email.endswith('@'):
         raise HTTPException(422, 'Ungueltige E-Mail-Adresse')
-    if payload.username.casefold() in payload.password.casefold() or str(payload.email).casefold() in payload.password.casefold():
-        raise HTTPException(422, 'Passwort darf Benutzername und E-Mail nicht enthalten')
+    if (
+        payload.username.casefold() in payload.password.casefold() 
+        or str(payload.email).casefold() in payload.password.casefold()
+    ):
+        raise HTTPException(
+            422,
+            'Passwort darf Benutzername und E-Mail nicht enthalten'
+        )
     async with KeycloakAdmin() as kc:
         await kc.groups()  # Fail-fast bei falscher Realm-Konfiguration
-        await kc.request('POST', 'users', json={'username': payload.username, 'email': str(payload.email),
-            'enabled': False, 'emailVerified': False, 'requiredActions': ['UPDATE_PASSWORD', 'CONFIGURE_TOTP'],
-            'credentials': [{'type': 'password', 'value': payload.password, 'temporary': True}]})
-        matches = await kc.request('GET', 'users', params={'username': payload.username, 'exact': 'true', 'max': 2})
+        await kc.request(
+            'POST',
+            'users',
+            json={
+                'username': payload.username,
+                'email': str(payload.email),
+                'enabled': False, 
+                'emailVerified': False, 
+                'requiredActions': [
+                    'UPDATE_PASSWORD', 
+                    'CONFIGURE_TOTP'
+                ],
+            'credentials': [
+                {
+                    'type': 'password', 
+                    'value': payload.password, 
+                    'temporary': True
+                }
+            ]
+          }
+        )
+        matches = await kc.request(
+            'GET',
+            'users', 
+            params={
+                'username': payload.username,
+                'exact': 'true',
+                'max': 2
+            }
+        )
+        
         if len(matches) != 1:
             raise HTTPException(502, 'Benutzer erstellt, Gruppenzuweisung muss manuell geprueft werden')
         uid = matches[0]['id']
@@ -111,12 +152,17 @@ async def update_enabled(uid: str, payload: EnabledUpdate, request: Request):
     check_csrf(request)
     uid = validate_uid(uid)
     if not payload.enabled and uid == (request.session.get('user') or {}).get('sub'):
-        raise HTTPException(409, 'Eigenes Konto kann nicht deaktiviert werden')
+        raise HTTPException(
+            409,
+            'Eigenes Konto kann nicht deaktiviert werden')
     async with KeycloakAdmin() as kc:
         if not payload.enabled:
             groups = await kc.user_groups(uid)
             if any(g.get('name') == 'Admins' for g in groups):
-                raise HTTPException(409, 'Admin-Konten nur in der Keycloak-Konsole deaktivieren (Schutz vor letztem Admin)')
+                raise HTTPException(
+                    409, 
+                    'Admin-Konten nur in der Keycloak-Konsole deaktivieren (Schutz vor letztem Admin)'
+                )
         await kc.request('PUT', f'users/{uid}', json={'enabled': payload.enabled})
         if not payload.enabled:
             await kc.request('POST', f'users/{uid}/logout')
