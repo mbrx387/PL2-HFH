@@ -65,6 +65,7 @@
                 <div>
                     {% if user %}
                     <span class="sidebar-user">{{ user.name or user.email or user.sub }}</span>
+                    {% if account_url %}<a href="{{ account_url }}" class="sidebar-logout">Mein Konto</a>{% endif %}
                     <a href="/auth/logout" class="sidebar-logout">Abmelden</a>
                     {% else %}
                     <span class="sidebar-user">Ohne Anmeldung (Entwicklung)</span>
@@ -465,7 +466,8 @@
                     </div>
                     <p id="users-list-message" role="status"></p>
                     <div class="table-wrapper"><table class="history-table"><thead><tr><th>Benutzername</th><th>E-Mail</th><th>Status</th><th>Aktion</th></tr></thead><tbody id="users-table-body"></tbody></table></div>
-                </section>
+                     <th>Status</th><th>Gruppe / Aktion</th>   
+                 </section>
             </section>
             {% endif %}
             
