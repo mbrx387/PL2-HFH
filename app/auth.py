@@ -136,7 +136,7 @@ async def validate_keycloak_session(user: dict) -> bool:
         user["roles"] = sorted({mapping[g["id"]] for g in groups if g.get("id") in mapping})
         return bool(user["roles"])
 
-    class LoginRequiredMiddleware(BaseHTTPMiddleware):
+class LoginRequiredMiddleware(BaseHTTPMiddleware):
     """Erzwingt einen gueltigen Keycloak-Login fuer alle uebrigen Routen.
 
     Greift nur, wenn AUTH_ENABLED=true (Default, siehe config.py) - der
@@ -155,16 +155,24 @@ async def validate_keycloak_session(user: dict) -> bool:
 
         user = request.session.get("user")
         if not user:
-            if path.startswith("/api/"):
             next_qs = urlencode({"next": path})
             return RedirectResponse(url=f"/auth/login?{next_qs}")
+
         try:
             valid = await validate_keycloak_session(user)
         except HTTPException:
-            return JSONResponse({"detail": "Anmeldung momentan nicht pruefbar"}, status_code=503)
+            return JSONResponse(
+                {"detail": "Anmeldung momentan nicht pruefbar"},
+                status_code=503,
+            )
+
         if not valid:
             request.session.clear()
-            return JSONResponse({"detail": "Sitzung beendet oder Zugriff entzogen"}, status_code=403)
+            return JSONResponse(
+                {"detail": "Sitzung beendet oder Zugriff entzogen"},
+                status_code=403,
+            )
+
         request.session["user"] = user
         return await call_next(request)
 
