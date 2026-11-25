@@ -78,11 +78,11 @@ class KeycloakAdmin:
         return await self.request('GET', f'users/{quote(uid, safe="")}/groups', params={'max': 1000})
 
     async def set_group(self, uid, group):
-        if group not in GROUPS and group not in GROUPS:
+        if group is not None and group not in GROUPS:
             raise HTTPException(422, "Ungueltige Zugriffsgruppe")
         ids = await self.groups()
         existing = await self.user_groups(uid)
-         target = ids[group] if group is not None else None
+        target = ids[group] if group is not None else None
         user_id = quote(uid, safe="")
         for g in existing:
             if g.get('id') in ids.values() and g['id'] != target:
