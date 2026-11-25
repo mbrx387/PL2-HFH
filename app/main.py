@@ -16,8 +16,7 @@ from app.auth import router as auth_router
 from app.config import get_settings
 from app.database import engine
 from app.mail_models import ensure_mail_history_table
-from app.routers import centers, mail
-from app.routers import admin
+from app.routers import admin, centers, mail
 from app.security import SecurityHeadersMiddleware
 
 settings = get_settings()
@@ -169,7 +168,11 @@ def index(request: Request):
             "can_manage_users": can_manage_users,
             #CSRF-Token im Template
             "admin_csrf": request.session.get("admin_csrf", "") if can_manage_users else "",
-            "account_url": (settings.oidc_issuer or "").rstrip("/") + "/account/" if settings.oidc_issuer else None,
+            "account_url": (
+                (settings.oidc_issuer or "").rstrip("/") + "/account/"
+                if settings.oidc_issuer 
+                else None,
+            ),
             "role_label": role_label if settings.auth_enabled else "Entwicklung",
         },
     )
