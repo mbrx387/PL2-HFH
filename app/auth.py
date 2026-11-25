@@ -7,18 +7,18 @@ Sessionmodell bleibt unabhaengig von der persistenten PostgreSQL-Datenbank und
 bedeutet:
 ein Neustart der App invalidiert keine bestehenden Logins (das Cookie bleibt
 gueltig, solange SECRET_KEY gleich bleibt), aber es gibt auch keine
-serverseitige Moeglichkeit, eine einzelne Session vorzeitig zu widerrufen
-(nur ueber Keycloak selbst, z.B. "Sessions beenden" in der Admin-Konsole).
+lokale Session-Datenbank. Geschuetzte Anfragen pruefen die konkrete Keycloak-Sitzung und Gruppen.
 """
 import logging
 from urllib.parse import urlencode
 
 from authlib.integrations.starlette_client import OAuth
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.config import get_settings
+from app.keycloak_admin import KeycloakAdmin
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -114,6 +114,27 @@ def require_permission(permission: str):
 
     return check_permission
 
+async def validate_keycloak_session(user: dict) -> bool:
+    uid, sid = user.get("sub"), user.get("sid")
+    if not uid or not sid:
+        return False
+    async with KeycloakAdmin() as kc:
+        try:
+            account = await kc.request("GET", f"users/{uid}")
+            if not account or not account.get("enabled"):
+                return False
+            sessions = await kc.request("GET", f"users/{uid}/sessions")
+            if not any(session.get("id") == sid for session in sessions):
+                return False
+            groups = await kc.user_groups(uid)
+            ids = await kc.groups()
+        except HTTPException as exc:
+            if exc.status_code == 404:
+                return False
+            raise
+        mapping = {ids["Lesend"]: "reader", ids["Redaktion"]: "editor", ids["Admins"]: "admin"}
+        user["roles"] = sorted({mapping[g["id"]] for g in groups if g.get("id") in mapping})
+        return bool(user["roles"])
 
 class LoginRequiredMiddleware(BaseHTTPMiddleware):
     """Erzwingt einen gueltigen Keycloak-Login fuer alle uebrigen Routen.
@@ -132,10 +153,20 @@ class LoginRequiredMiddleware(BaseHTTPMiddleware):
         if path in PUBLIC_PATHS or path.startswith(PUBLIC_PATH_PREFIXES):
             return await call_next(request)
 
-        if not request.session.get("user"):
+        user = request.session.get("user")
+        if not user:
+            if path.startswith("/api/"):
+                return JSONResponse({"detail": "Anmeldung erforderlich"}, status_code=401)
             next_qs = urlencode({"next": path})
             return RedirectResponse(url=f"/auth/login?{next_qs}")
-
+        try:
+            valid = await validate_keycloak_session(user)
+        except HTTPException:
+            return JSONResponse({"detail": "Anmeldung momentan nicht pruefbar"}, status_code=503)
+        if not valid:
+            request.session.clear()
+            return JSONResponse({"detail": "Sitzung beendet oder Zugriff entzogen"}, status_code=403)
+        request.session["user"] = user
         return await call_next(request)
 
 
@@ -157,7 +188,13 @@ async def callback(request: Request):
     token = await oauth.keycloak.authorize_access_token(request)
     userinfo = token.get("userinfo") or await oauth.keycloak.userinfo(token=token)
 
+    session_id = (token.get("userinfo") or {}).get("sid") or userinfo.get("sid") or token.get("session_state")
+    if not session_id:
+        request.session.clear()
+        raise HTTPException(503, "Keycloak-Sitzungs-ID fehlt")
+    
     request.session["user"] = {
+        "sid": session_id,
         "sub": userinfo.get("sub"),
         "email": userinfo.get("email"),
         "name": userinfo.get("name") or userinfo.get("preferred_username"),
