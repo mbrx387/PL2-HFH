@@ -156,7 +156,6 @@ async def validate_keycloak_session(user: dict) -> bool:
         user = request.session.get("user")
         if not user:
             if path.startswith("/api/"):
-                return JSONResponse({"detail": "Anmeldung erforderlich"}, status_code=401)
             next_qs = urlencode({"next": path})
             return RedirectResponse(url=f"/auth/login?{next_qs}")
         try:
