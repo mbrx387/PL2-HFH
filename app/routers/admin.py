@@ -4,11 +4,13 @@ import hmac
 import logging
 import re
 from urllib.parse import urlsplit
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
+
 from app.auth import require_permission
 from app.config import get_settings
-from app.keycloak_admin import KeycloakAdmin, GROUPS
+from app.keycloak_admin import GROUPS, KeycloakAdmin
 
 logger = logging.getLogger(__name__)
 # niemals Admin-API ohne echte Admin-Sitzung
