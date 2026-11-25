@@ -82,8 +82,10 @@ class KeycloakAdmin:
             raise HTTPException(422, "Ungueltige Zugriffsgruppe")
         ids = await self.groups()
         existing = await self.user_groups(uid)
-        # Erst neue Gruppe zuweisen, dann alte entfernen; alle App-Gruppen exklusiv.
-        await self.request('PUT', f'users/{quote(uid, safe="")}/groups/{quote(ids[group], safe="")}')
+         target = ids[group] if group is not None else None
+        user_id = quote(uid, safe="")
         for g in existing:
-            if g.get('name') in GROUPS and g['id'] != ids[group]:
-                await self.request('DELETE', f'users/{quote(uid, safe="")}/groups/{quote(g["id"], safe="")}')
+            if g.get('id') in ids.values() and g['id'] != target:
+                await self.request('DELETE', f'users/{user_id}/groups/{quote(g["id"], safe="")}')
+        if target is not None:
+            await self.request('PUT', f'users/{user_id}/groups/{quote(target, safe="")}')
