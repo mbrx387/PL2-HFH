@@ -315,20 +315,36 @@ def test_mail_endpoints_require_login(make_app):
 def test_logged_in_user_is_recorded_as_sender(make_app, monkeypatch):
     app = make_app(**OIDC_ENV)
 
-      async def mock_validate_keycloak_session(user):
-            return bool(user.get("sub") and user.get("sid"))
+    async def mock_validate_keycloak_session(user):
+        return bool(user.get("sub") and user.get("sid"))
 
-        monkeypatch.setattr(
-            "app.auth.validate_keycloak_session",
-            mock_validate_keycloak_session,
-        )
-    
+    monkeypatch.setattr(
+        "app.auth.validate_keycloak_session",
+        mock_validate_keycloak_session,
+    )
+
     with TestClient(app) as client:
-        user = {"sub": "123", "email": "adrian@hfh.test", "roles": ["reader"]}
-        client.cookies.set("session", _session_cookie("x" * 40, user))
-        token = _prepare(client, center_ids=[10])["batches"][0]["handoff_token"]
+        user = {
+            "sub": "123",
+            "email": "adrian@hfh.test",
+            "roles": ["reader"],
+            "sid": "test-session-id",
+        }
+
+        client.cookies.set(
+            "session",
+            _session_cookie("x" * 40, user),
+        )
+
+        token = _prepare(
+            client,
+            center_ids=[10],
+        )["batches"][0]["handoff_token"]
+
         entry = _handoff(client, token).json()["history"]
+
         assert entry["created_by"] == "adrian@hfh.test"
+
 
 
 def test_mail_endpoints_require_app_role(make_app):
