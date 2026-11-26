@@ -114,7 +114,7 @@ def require_permission(permission: str):
 
     return check_permission
 
-async def ate_keycloak_session(user: dict) -> bool:
+async def validate_keycloak_session(user: dict) -> bool:
     uid, sid = user.get("sub"), user.get("sid")
     if not uid or not sid:
         return False
