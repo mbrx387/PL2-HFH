@@ -114,7 +114,7 @@ def require_permission(permission: str):
 
     return check_permission
 
-async def validate_keycloak_session(user: dict) -> bool:
+async def ate_keycloak_session(user: dict) -> bool:
     uid, sid = user.get("sub"), user.get("sid")
     if not uid or not sid:
         return False
@@ -144,7 +144,7 @@ class LoginRequiredMiddleware(BaseHTTPMiddleware):
     zusammen mit vollstaendig konfiguriertem OIDC erreicht wird.
     """
 
-    async def dispatch(self, request: Request, call_next):
+  async def dispatch(self, request: Request, call_next):
         """Leitet nicht angemeldete Anfragen auf die Keycloak-Anmeldung um."""
         if not settings.auth_enabled:
             return await call_next(request)
@@ -158,22 +158,6 @@ class LoginRequiredMiddleware(BaseHTTPMiddleware):
             next_qs = urlencode({"next": path})
             return RedirectResponse(url=f"/auth/login?{next_qs}")
 
-        try:
-            valid = await validate_keycloak_session(user)
-        except HTTPException:
-            return JSONResponse(
-                {"detail": "Anmeldung momentan nicht pruefbar"},
-                status_code=503,
-            )
-
-        if not valid:
-            request.session.clear()
-            return JSONResponse(
-                {"detail": "Sitzung beendet oder Zugriff entzogen"},
-                status_code=403,
-            )
-
-        request.session["user"] = user
         return await call_next(request)
 
 
