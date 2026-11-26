@@ -149,7 +149,9 @@ def index(request: Request):
     # eigentliche Pruefung passiert serverseitig in require_permission().
     can_edit = has_permission(user, "write_centers") if settings.auth_enabled else True
     # Eigene Berechtigung für Benutzerverwaltung
-    can_manage_users = settings.auth_enabled and has_permission(user, "manage_users")
+    # Benutzerverwaltung bis zur Einrichtung des
+    # Keycloak-Service-Accounts deaktiviert.
+    can_manage_users = False
     # CSRF-Token pro Sitzung, nur fuer Admin-Formulare
     import secrets
     if can_manage_users and 'admin_csrf' not in request.session:
