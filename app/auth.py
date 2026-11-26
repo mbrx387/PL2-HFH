@@ -158,8 +158,23 @@ class LoginRequiredMiddleware(BaseHTTPMiddleware):
             next_qs = urlencode({"next": path})
             return RedirectResponse(url=f"/auth/login?{next_qs}")
 
-        # Zusaetzliche Keycloak-Admin-Sitzungspruefung
-        # voruebergehend deaktiviert.
+        if settings.keycloak_admin_enabled:
+            try:
+                valid = await validate_keycloak_session(user)
+            except HTTPException:
+                return JSONResponse(
+                    {"detail": "Anmeldung momentan nicht pruefbar"},
+                    status_code=503,
+                )
+
+            if not valid:
+                request.session.clear()
+                return JSONResponse(
+                    {"detail": "Sitzung beendet oder Zugriff entzogen"},
+                    status_code=403,
+                )
+
+            request.session["user"] = user
 
         return await call_next(request)
 
