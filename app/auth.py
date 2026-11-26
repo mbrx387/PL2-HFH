@@ -144,7 +144,7 @@ class LoginRequiredMiddleware(BaseHTTPMiddleware):
     zusammen mit vollstaendig konfiguriertem OIDC erreicht wird.
     """
 
-  async def dispatch(self, request: Request, call_next):
+    async def dispatch(self, request: Request, call_next):
         """Leitet nicht angemeldete Anfragen auf die Keycloak-Anmeldung um."""
         if not settings.auth_enabled:
             return await call_next(request)
@@ -157,6 +157,9 @@ class LoginRequiredMiddleware(BaseHTTPMiddleware):
         if not user:
             next_qs = urlencode({"next": path})
             return RedirectResponse(url=f"/auth/login?{next_qs}")
+
+        # Zusaetzliche Keycloak-Admin-Sitzungspruefung
+        # voruebergehend deaktiviert.
 
         return await call_next(request)
 
