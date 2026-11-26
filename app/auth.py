@@ -198,7 +198,7 @@ async def callback(request: Request):
     userinfo = token.get("userinfo") or await oauth.keycloak.userinfo(token=token)
 
     session_id = (token.get("userinfo") or {}).get("sid") or userinfo.get("sid") or token.get("session_state")
-    if not session_id:
+    if settings.keycloak_admin_enabled and not session_id:
         request.session.clear()
         raise HTTPException(503, "Keycloak-Sitzungs-ID fehlt")
     
