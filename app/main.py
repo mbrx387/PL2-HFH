@@ -172,7 +172,7 @@ def index(request: Request):
             "account_url": (
                 (settings.oidc_issuer or "").rstrip("/") + "/account/"
                 if settings.oidc_issuer 
-                else None,
+                else None
             ),
             "role_label": role_label if settings.auth_enabled else "Entwicklung",
         },
