@@ -157,7 +157,6 @@ def index(request: Request):
     # Nur fuer die Anzeige (Menuepunkt "Datenpflege" ein-/ausblenden); die
     # eigentliche Pruefung passiert serverseitig in require_permission().
     can_edit = has_permission(user, "write_centers") if settings.auth_enabled else True
-   enutzerverwaltung bis zur Einrichtung des
     # Eigene Berechtigung für Benutzerverwaltung
     can_manage_users = (
         settings.auth_enabled and settings.keycloak_admin_enabled and has_permission(user, "manage_users")
