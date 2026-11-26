@@ -13,10 +13,10 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from app.auth import LoginRequiredMiddleware, has_permission
 from app.auth import router as auth_router
-from app.config import get_settings
+from app.config import get_settings, is_placeholder
 from app.database import engine
 from app.mail_models import ensure_mail_history_table
-from app.routers import centers, mail
+from app.routers import admin, centers, mail
 from app.security import SecurityHeadersMiddleware
 
 settings = get_settings()
