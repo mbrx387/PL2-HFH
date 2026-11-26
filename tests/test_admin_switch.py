@@ -32,6 +32,6 @@ def test_admin_switch(make_app, monkeypatch, enabled):
         assert ('data-can-manage-users="true"' in page.text) is enabled
         assert bool(calls) is enabled
         assert 'href="https://example.org/idp/realms/hfh-pflege/account/"' in page.text
-        assert any(r.path == "/api/admin/users" for r in app.routes) is enabled
+        assert ("/api/admin/users" in app.openapi()["paths"]) is enabled
         if not enabled:
             assert client.get("/api/admin/users").status_code == 404
