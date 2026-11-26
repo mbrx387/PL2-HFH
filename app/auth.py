@@ -14,7 +14,7 @@ from urllib.parse import urlencode
 
 from authlib.integrations.starlette_client import OAuth
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.config import get_settings
@@ -158,8 +158,23 @@ class LoginRequiredMiddleware(BaseHTTPMiddleware):
             next_qs = urlencode({"next": path})
             return RedirectResponse(url=f"/auth/login?{next_qs}")
 
-        # Zusaetzliche Keycloak-Admin-Sitzungspruefung
-        # voruebergehend deaktiviert.
+        if settings.keycloak_admin_enabled:
+            try:
+                valid = await validate_keycloak_session(user)
+            except HTTPException:
+                return JSONResponse(
+                    {"detail": "Anmeldung momentan nicht pruefbar"},
+                    status_code=503,
+                )
+
+            if not valid:
+                request.session.clear()
+                return JSONResponse(
+                    {"detail": "Sitzung beendet oder Zugriff entzogen"},
+                    status_code=403,
+                )
+
+            request.session["user"] = user
 
         return await call_next(request)
 
@@ -183,7 +198,7 @@ async def callback(request: Request):
     userinfo = token.get("userinfo") or await oauth.keycloak.userinfo(token=token)
 
     session_id = (token.get("userinfo") or {}).get("sid") or userinfo.get("sid") or token.get("session_state")
-    if not session_id:
+    if settings.keycloak_admin_enabled and not session_id:
         request.session.clear()
         raise HTTPException(503, "Keycloak-Sitzungs-ID fehlt")
     

@@ -16,9 +16,12 @@ logger = logging.getLogger(__name__)
 # niemals Admin-API ohne echte Admin-Sitzung
 async def require_admin_session(user: dict =
     Depends(require_permission("manage_users"))):
-    if not get_settings().auth_enabled or not user:
+    settings = get_settings()
+    if not settings.keycloak_admin_enabled:
+        raise HTTPException(404, "Benutzerverwaltung deaktiviert")
+    if not settings.auth_enabled or not user:
         raise HTTPException(403, 'Admin-Anmeldung erforderlich')
-        return user
+    return user
 
 router = APIRouter(prefix='/api/admin', tags=['admin'], dependencies=[Depends(require_admin_session)])
 UID_RE = re.compile(r'^[0-9a-fA-F-]{36}$')

@@ -13,10 +13,10 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from app.auth import LoginRequiredMiddleware, has_permission
 from app.auth import router as auth_router
-from app.config import get_settings
+from app.config import get_settings, is_placeholder
 from app.database import engine
 from app.mail_models import ensure_mail_history_table
-from app.routers import centers, mail
+from app.routers import admin, centers, mail
 from app.security import SecurityHeadersMiddleware
 
 settings = get_settings()
@@ -40,6 +40,13 @@ async def lifespan(app: FastAPI):
             "App neu starten - oder fuer lokale Entwicklung ohne Login AUTH_ENABLED=false "
             "setzen (NICHT fuer den Produktivbetrieb)."
         )
+    if settings.keycloak_admin_enabled and (
+        not settings.auth_enabled
+        or is_placeholder(settings.keycloak_admin_client_id)
+        or is_placeholder(settings.keycloak_admin_client_secret)
+    ):
+        raise RuntimeError("Admin-Schalter erfordert AUTH_ENABLED und Admin-Client-Zugangsdaten.")
+    
     if settings.is_production and settings.secret_key_is_weak:
         raise RuntimeError(
             "SECRET_KEY ist ein Platzhalter oder kuerzer als 32 Zeichen - das darf im "
@@ -114,6 +121,8 @@ app.add_middleware(
 app.include_router(auth_router)
 app.include_router(centers.router)
 app.include_router(mail.router)
+if settings.auth_enabled and settings.keycloak_admin_enabled:
+    app.include_router(admin.router)
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 templates = Jinja2Templates(directory="app/templates")
 
@@ -149,9 +158,9 @@ def index(request: Request):
     # eigentliche Pruefung passiert serverseitig in require_permission().
     can_edit = has_permission(user, "write_centers") if settings.auth_enabled else True
     # Eigene Berechtigung für Benutzerverwaltung
-    # Benutzerverwaltung bis zur Einrichtung des
-    # Keycloak-Service-Accounts deaktiviert.
-    can_manage_users = False
+    can_manage_users = (
+        settings.auth_enabled and settings.keycloak_admin_enabled and has_permission(user, "manage_users")
+    )
     # CSRF-Token pro Sitzung, nur fuer Admin-Formulare
     import secrets
     if can_manage_users and 'admin_csrf' not in request.session:
@@ -171,7 +180,7 @@ def index(request: Request):
             "admin_csrf": request.session.get("admin_csrf", "") if can_manage_users else "",
             "account_url": (
                 (settings.oidc_issuer or "").rstrip("/") + "/account/"
-                if settings.oidc_issuer 
+                if settings.auth_enabled and settings.oidc_issuer
                 else None
             ),
             "role_label": role_label if settings.auth_enabled else "Entwicklung",
