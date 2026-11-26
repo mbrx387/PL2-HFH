@@ -15,6 +15,7 @@ TEST_CSV = str(Path(__file__).parent / "data" / "centers.csv")
 BASE_ENV = {
     "ENVIRONMENT": "development",
     "AUTH_ENABLED": "false",
+    "KEYCLOAK_ADMIN_ENABLED": "false",
     "DATABASE_URL": "sqlite://",
     "SECRET_KEY": "x" * 40,
     "OIDC_ISSUER": "",
