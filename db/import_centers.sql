@@ -30,6 +30,7 @@ CREATE TEMP TABLE centers_import (
 -- werden VOR dem Upsert aus der Temp-Tabelle aufgeloest, damit keine
 -- UNIQUE-Verletzung (zqp_id) den Import abbrechen laesst -- mit ON_ERROR_STOP
 -- rollt sonst die gesamte Transaktion zurueck.
+-- Autor: Gabriel Pfuner (github.com/3mg4)
 
 -- 0) Guard: IDs ab 1.000.000 gehoeren manuell angelegten Einrichtungen. Eine
 --    solche ID in der Import-CSV ist ein Fehler -> kompletter Abbruch. Feuert

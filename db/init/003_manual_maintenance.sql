@@ -1,4 +1,5 @@
 -- Issue #85: Sperrvermerk fuer manuell gepflegte Einrichtungen.
+-- Autor: Gabriel Pfuner (github.com/3mg4)
 --
 -- Docker fuehrt diese Datei NUR beim ersten Initialisieren eines leeren
 -- Datenbank-Volumes aus (wie 001_create_centers.sql und 002_create_mail_history.sql).

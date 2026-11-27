@@ -7,6 +7,7 @@
 # ueberschrieben noch dupliziert) und Import passieren in db/import_centers.sql
 # in EINER Transaktion mit ON_ERROR_STOP. NOTICE-Meldungen (z. B. Anzahl der
 # uebersprungenen gesperrten Eintraege) landen in diesem Log.
+# Autor: Gabriel Pfuner (github.com/3mg4)
 set -Eeuo pipefail
 
 PROJECT_DIR="${PROJECT_DIR:-/opt/pl2-hfh}"

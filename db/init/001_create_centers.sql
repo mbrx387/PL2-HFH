@@ -14,6 +14,7 @@
 -- Nummern erhalten bleiben. aktiv kennzeichnet, ob eine Pflegestelle aktiv
 -- ist, statt sie zu löschen. quelle_updated_at speichert den
 -- Aktualisierungszeitpunkt aus der Datenquelle.
+-- Autor: Gabriel Pfuner (github.com/3mg4)
 
 CREATE TABLE IF NOT EXISTS centers (
     id integer PRIMARY KEY,

@@ -1,8 +1,36 @@
+<!--
+# Autor: Gabriel Pfuner (github.com/3mg4, Matrikelnummer: 1142226)
+Dieses Dokument erläutert das PostgreSQL-Schema, seine Initialisierung,
+die Datenpflege-Sperren und den Import der Pflegestellendaten.
+-->
+
 # PostgreSQL-Datenbankschema
+
+**Autor:** Gabriel Pfuner
 
 Diese Dokumentation beschreibt die PostgreSQL-Verbindung der App, das Init-Skript
 [`db/init/001_create_centers.sql`](../db/init/001_create_centers.sql), die
 Tabellen des Pflegestellenverzeichnisses und den CSV-Import.
+
+## Aufgabe der SQL-Datenbank im System
+
+Die PostgreSQL-Datenbank `pflegedb` ist der dauerhafte Datenspeicher der
+Anwendung. Sie enthält das Pflegestellenverzeichnis und dessen Leistungsangebot:
+Die App liest diese Daten für Suche, Filter und E-Mail-Empfängerauswahl und
+ermöglicht berechtigten Personen, Einträge manuell anzulegen, zu ändern oder
+zu deaktivieren. Die Tabellen `centers`, `services` und `center_services`
+bilden diese fachlichen Daten ab.
+
+Neue Quelldaten gelangen nicht automatisch durch die ETL-Erzeugung in die
+Produktionsdatenbank. Der separate CSV-Import aktualisiert vorhandene
+Pflegestellen und ihre Leistungszuordnungen; manuell gesperrte Einträge werden
+übersprungen. Die App selbst führt diesen Import nicht aus.
+
+`mail_history` speichert die Übergaben vorbereiteter BCC-E-Mails an das lokale
+Mailprogramm, damit die Übergaben später nachvollziehbar und auswertbar sind.
+Die Datenbank kann nicht feststellen, ob eine Person die E-Mail im Mailprogramm
+tatsächlich abgeschickt hat. Benutzerkonten und Anmeldedaten liegen nicht in
+`pflegedb`: Keycloak verwendet dafür einen eigenen Datenbankdienst.
 
 ## Zweck des Init-Skripts
 
@@ -48,11 +76,45 @@ Eine Zeile entspricht einer Pflegestelle. `id` ist die stabile, interne ID;
 | `longitude` | `double precision` | Längengrad; optional, falls gesetzt zwischen 5 und 16 |
 | `aktiv` | `boolean` | Aktiv-Status; standardmäßig `true` |
 | `manuell_gepflegt` | `boolean` | Sperrvermerk gegen den Import (Issue #85); Standard `false` |
-| `manuell_geaendert_von` | `varchar(255)` | Login-Name (`preferred_username`) der letzten manuellen Änderung |
+| `manuell_geaendert_von` | `varchar(255)` | Keycloak-Loginname (`preferred_username`), ersatzweise E-Mail, der letzten manuellen Änderung |
 | `manuell_geaendert_am` | `timestamptz` | Zeitpunkt der letzten manuellen Änderung |
 | `quelle_updated_at` | `timestamp` | Änderungszeitpunkt in der Quelldatei |
 | `created_at` | `timestamptz` | Zeitpunkt der Anlage; standardmäßig aktuelle Zeit |
 | `updated_at` | `timestamptz` | Zeitpunkt der Änderung; standardmäßig aktuelle Zeit |
+
+### Sperrvermerk für manuell gepflegte Einrichtungen (Issue #85)
+
+[`db/init/003_manual_maintenance.sql`](../db/init/003_manual_maintenance.sql)
+ergänzt die Tabelle `centers` um `manuell_gepflegt`,
+`manuell_geaendert_von` und `manuell_geaendert_am`. Das SQL-Skript ist
+idempotent und wird vom PostgreSQL-Docker-Image nur beim erstmaligen Anlegen
+eines leeren Datenbank-Volumes ausgeführt. Bei bereits vorhandenen Datenbanken
+legt die App beim Start dieselben fehlenden Spalten über
+[`app/maintenance.py`](../app/maintenance.py) an. Eine transaktionale
+PostgreSQL-Advisory-Lock-Sperre verhindert Konflikte, wenn mehrere
+Gunicorn-Worker gleichzeitig starten.
+
+Beim Start werden außerdem vorhandene Einträge mit `id >= 1.000.000` als
+manuell gepflegt markiert. Diese Altbestände erhalten keinen nachträglichen
+Änderungsbenutzer oder -zeitpunkt; beide Werte bleiben `NULL`, weil diese
+Informationen nicht zuverlässig bekannt sind.
+
+Die Sperre schützt manuell bearbeitete Datensätze vor dem ETL-Import:
+
+- Die API vergibt für neue manuelle Einträge IDs ab `1.000.000` und setzt den
+  Sperrvermerk. Bei manuellen Änderungen werden zusätzlich Benutzername
+  (ersatzweise E-Mail) und Änderungszeitpunkt gespeichert. Das Deaktivieren
+  einer Einrichtung setzt ebenfalls den Sperrvermerk.
+- `db/import_centers.sql` überspringt Importzeilen, die zu einem gesperrten
+  Datensatz passen – anhand der internen ID, der `zqp_id` oder des Schlüssels
+  aus Name, Adresse, PLZ und Ort. Dabei bleiben dessen Felder und
+  Leistungszuordnungen unverändert; die Zahl übersprungener Zeilen erscheint
+  als `NOTICE` im Import-Log.
+- IDs ab `1.000.000` sind für manuelle Einträge reserviert. Taucht eine solche
+  ID in der Import-CSV auf, bricht der Import mit einem Fehler ab. Über
+  `DELETE /api/centers/{center_id}/manual-lock` kann die Redaktion den
+  Sperrvermerk entfernen; ein späterer Import kann den Datensatz dann wieder
+  aus der Quelle aktualisieren.
 
 ### `services`
 
@@ -106,7 +168,7 @@ Angelegt durch [`db/init/002_create_mail_history.sql`](../db/init/002_create_mai
 | `campaign_id` | `varchar(32)` | Gemeinsame ID aller BCC-Gruppen einer Auswahl |
 | `batch_number`, `batch_count` | `integer` | Gruppe *n* von *m* (`1 ≤ n ≤ m`) |
 | `created_at` | `timestamptz` | Zeitpunkt der Übergabe |
-| `created_by` | `varchar(255)` | Angemeldete Person (E-Mail aus Keycloak); leer ohne Login |
+| `created_by` | `varchar(255)` | Angemeldete Person (E-Mail, Name oder ID aus der Keycloak-Sitzung); leer ohne Login |
 | `subject` | `varchar(255)` | Betreff |
 | `body` | `text` | Nachrichtentext |
 | `recipients` | `json` | Liste der BCC-Adressen |

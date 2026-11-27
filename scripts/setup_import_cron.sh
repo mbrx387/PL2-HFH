@@ -7,6 +7,7 @@
 # Timing: Der GitHub-Actions-Lauf startet Samstag 02:00 UTC und hat ein Timeout
 # von 180 Minuten -> der Import-Cron laeuft Samstag 06:00 UTC. Dank Marker
 # (sha256 der CSV) ist der Lauf idempotent.
+# Autor: Gabriel Pfuner (github.com/3mg4)
 set -Eeuo pipefail
 
 PROJECT_DIR="${PROJECT_DIR:-/opt/pl2-hfh}"

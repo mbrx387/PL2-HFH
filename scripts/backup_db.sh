@@ -1,3 +1,4 @@
+# Autor: Gabriel Pfuner (github.com/3mg4)
 #!/usr/bin/env bash
 
 set -Eeuo pipefail

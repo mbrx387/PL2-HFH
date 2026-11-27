@@ -1,18 +1,19 @@
 # PL2-HFH – Pflegezentren-Finder
 
-Entwicklung einer Datenbank zur Bedarfsermittlung pflegender Angehöriger.
+Webanwendung zur Suche, Pflege und Kommunikation mit Pflege- und
+Beratungsstellen als Unterstützung pflegender Angehöriger.
 
-Dieses Repository enthält das **Grundgerüst** der Webanwendung: Sie zeigt
-Pflege- und Beratungsstellen in Deutschland als filterbare Liste mit
-Checkboxen an. Nutzer:innen wählen beliebig viele Stellen aus und lösen
-darüber eine E-Mail über ihr **eigenes, lokal konfiguriertes Mailprogramm**
-aus (Outlook, Apple Mail, Thunderbird, Web-Mail-Client des Betriebssystems
-…) – der Server verschickt selbst keine Mails.
+Die Anwendung bietet ein durchsuchbares und filterbares Verzeichnis von
+Pflege- und Beratungsstellen, rollenbasierte Datenpflege, eine Übersicht sowie
+die Vorbereitung und Dokumentation von BCC-E-Mail-Übergaben. E-Mails werden
+über das **eigene, lokal konfigurierte Mailprogramm** ausgelöst (Outlook,
+Apple Mail, Thunderbird oder ein anderes konfiguriertes Mailprogramm) – der
+Server verschickt selbst keine E-Mails. Quelldaten werden separat per
+ETL-CSV-Import in die Datenbank übernommen.
 
-Dieses Dokument beschreibt vor allem **wie und warum** die Anwendung so
-aufgebaut und gehostet ist. Das war der hier zu erbringende Teil des
-Projekts; Datenmodell/Fachlogik werden im Team weiter ausgebaut (siehe
-[Nächste Schritte](docs/ROADMAP.md)).
+Dieses Dokument beschreibt Funktionen, Architektur und Betrieb der Anwendung.
+Den aktuellen Umsetzungsstand und geplante Arbeiten hält die
+[Roadmap](docs/ROADMAP.md) fest.
 
 ---
 
@@ -21,12 +22,12 @@ Projekts; Datenmodell/Fachlogik werden im Team weiter ausgebaut (siehe
 | Frage | Entscheidung | Warum |
 |---|---|---|
 | Framework | **FastAPI (Python)** | Klein, schnell erlernbar, automatische OpenAPI-Doku unter `/api/docs`, native Typvalidierung (Pydantic), asynchron-fähig, sehr verbreitet – gute Basis für ein Hochschulprojekt mit wechselnden Mitwirkenden. |
-| Datenhaltung | **PostgreSQL über SQLAlchemy**, Tabellen `centers`, `services` und `center_services`; initialisiert aus dem ETL-CSV-Import | Persistente Daten und eine gemeinsame Datenquelle für App und Importjob. PostgreSQL bleibt nur im internen Compose-Netzwerk erreichbar. |
-| Frontend | **Server-gerenderte Jinja2-Seite + Vanilla JS**, kein SPA-Framework | Kein Build-Schritt, kein Node-Toolchain-Overhead im Container, niedrige Einstiegshürde fürs Team, für den beschriebenen Funktionsumfang (Liste + Checkboxen + Filter) ausreichend. |
+| Datenhaltung | **PostgreSQL über SQLAlchemy**, Kerntabellen `centers`, `services` und `center_services`; Schema aus `db/init/`, Befüllung per ETL-CSV-Import | Persistente Daten und eine gemeinsame Datenquelle für App und Importjob. Zusätzlich speichert `mail_history` die Übergaben an das Mailprogramm. PostgreSQL bleibt nur im internen Compose-Netzwerk erreichbar. |
+| Frontend | **Server-gerenderte Jinja2-Seite + Vanilla JS**, kein SPA-Framework | Kein Build-Schritt, kein Node-Toolchain-Overhead im Container, niedrige Einstiegshürde fürs Team; ausreichend für Verzeichnis, Dashboard, Datenpflege und E-Mail-Funktionen. |
 | Mailversand | **`mailto:`-Link im Browser** statt serverseitigem SMTP-Versand | Erfüllt die Vorgabe „über die eigene Standardmailbox versenden“ exakt, UND: der Server verarbeitet dadurch keine SMTP-Zugangsdaten und hat keinen Angriffsvektor „Mailrelay-Missbrauch“. Sicherheits- und Datenschutzvorteil in einem. Seit AP5 ermittelt der Server die Adressen, teilt sie in BCC-Gruppen (max. 20) und dokumentiert jede Übergabe an das Mailprogramm in `mail_history` ([Details](docs/AP5_EMAIL_HISTORY.md)). |
-| Containerisierung | **Docker Compose** (nicht Swarm/Kubernetes) | Ein Ubuntu-Server, überschaubare Last, kleines Team. Docker Compose deckt „App + Reverse Proxy (+ optional SSO)“ vollständig ab, ohne die Betriebskomplexität eines Cluster-Orchestrators. Migration zu Swarm/K8s bleibt möglich, ist aber aktuell nicht gerechtfertigt (siehe Abschnitt 4). |
+| Containerisierung | **Docker Compose** (nicht Swarm/Kubernetes) | Ein Ubuntu-Server, überschaubare Last, kleines Team. Docker Compose deckt App, Reverse Proxy, Keycloak (Profil `sso`) und optionales Monitoring ab, ohne die Betriebskomplexität eines Cluster-Orchestrators. Migration zu Swarm/K8s bleibt möglich, ist aber aktuell nicht gerechtfertigt (siehe Abschnitt 4). |
 | Netzwerk-Exposition | **Nginx als TLS-Reverse-Proxy**, App-Container nur intern erreichbar | HTTPS-Terminierung, Security-Header, Rate-Limiting an einer zentralen Stelle statt in der Anwendung; die FastAPI-App selbst ist vom Host/Internet aus nicht direkt erreichbar. |
-| Login/SSO | **Aktiv**: OpenID Connect gegen **Keycloak** (`docker-compose`-Profil `sso`), erzwungen über eine App-Middleware | Kein selbstgebautes Login (Passwort-Handling, Brute-Force-Schutz etc. sind fehleranfällig) – ein etablierter Open-Source-IdP übernimmt das. Details/Betrieb siehe [Abschnitt 5](#5-sicherheitskonzept) und [Roadmap](docs/ROADMAP.md). |
+| Login/SSO | **Aktiv**: OpenID Connect gegen **Keycloak** (`docker-compose`-Profil `sso`), erzwungen über eine App-Middleware | Kein selbstgebautes Login (Passwort-Handling, Brute-Force-Schutz etc. sind fehleranfällig) – ein etablierter Open-Source-IdP übernimmt das. Details/Betrieb siehe [Abschnitt 5](#5-sicherheitskonzept) und [Abschnitt 8](#8-server-inbetriebnahme). |
 
 ---
 
@@ -43,7 +44,7 @@ PL2-HFH/
 │   ├── security.py               # Security-Header-Middleware
 │   ├── auth.py                   # OIDC-Login (Keycloak), Login-Pflicht-Middleware
 │   ├── gunicorn_worker.py        # Proxy-Header-fähiger Uvicorn-Worker (siehe auth.py)
-│   ├── routers/centers.py        # GET /api/centers, /api/bundeslaender
+│   ├── routers/centers.py        # Suche/Filter, Anlegen/Ändern, Deaktivieren
 │   ├── routers/mail.py           # AP5: /api/mail/prepare, /api/mail/handoff, /api/mail-history
 │   ├── mail_service.py           # AP5: Adressen aus der DB, BCC-Aufteilung, mailto:-Link
 │   ├── mail_models.py            # AP5: Tabelle mail_history (+ sicheres Anlegen beim Start)
@@ -89,6 +90,8 @@ den Import ab, falls sie in der CSV auftauchen. Die Web-App liest direkt aus
 denselben Tabellen; sie lädt oder überschreibt die Daten nicht beim Start.
 `unsere_id` wird als stabile `centers.id` übernommen. Das PostgreSQL-Volume
 `app-db-data` bleibt über Container-Neustarts erhalten.
+Details zu Import-Cronjob und Datenbank-Backups stehen in
+[ImportSkript.md](docs/ImportSkript.md).
 
 ## 4. Hosting-Konzept
 
@@ -123,7 +126,7 @@ Internet
 
 **Warum Docker Compose statt Docker Swarm/Kubernetes?**
 Wir haben einen einzelnen Server, ein kleines Team und einen überschaubaren
-Funktionsumfang (eine Web-App + Reverse Proxy, perspektivisch + SSO). Ein
+Funktionsumfang (eine Web-App + Reverse Proxy und Keycloak im Profil `sso`). Ein
 Cluster-Orchestrator bringt hier nur zusätzliche Betriebskomplexität
 (Multi-Node-Netzwerke, Secrets-Management, Rolling-Update-Mechanik) ohne
 echten Nutzen – es gibt nichts zu skalieren oder auszufallsichern. Docker
@@ -149,8 +152,7 @@ Timeouts) – Standardmuster für FastAPI-Deployments.
 
 Da personenbezogene/institutionelle Kontaktdaten (E-Mail-Adressen von
 Beratungsstellen) verarbeitet werden und die Anwendung öffentlich erreichbar
-sein wird, war Sicherheit von Anfang an Teil des Grundgerüsts, nicht
-nachträglich aufgesetzt:
+ist, ist Sicherheit Teil der Architektur:
 
 - **HTTPS/TLS**: Terminierung in nginx. Auf dem Server stellt **certbot**
   das Let's-Encrypt-Zertifikat aus und verlängert es (Webroot-Methode über
@@ -167,9 +169,10 @@ nachträglich aufgesetzt:
    gibt keine SMTP-Zugangsdaten im System und keinen Vektor für
   Mailrelay-Missbrauch/Spam über die Anwendung. Seit AP5 speichert die
   Tabelle `mail_history` Betreff, Text, BCC-Adressen und die angemeldete
-  Person jeder Übergabe an das Mailprogramm. Lesen dürfen sie derzeit alle
-  angemeldeten Nutzer:innen (noch keine Rollen); Aufbewahrungsfrist und
-  Berechtigungen sind im Team festzulegen (siehe docs/AP5_EMAIL_HISTORY.md).
+  Person jeder Übergabe an das Mailprogramm. Lesen dürfen alle angemeldeten
+  Rollen mit `read_centers` (`reader`, `editor`, `admin`). Eine automatische
+  Aufbewahrungs- oder Löschfrist ist nicht implementiert (siehe
+  [AP5_EMAIL_HISTORY.md](docs/AP5_EMAIL_HISTORY.md)).
 - **Least Privilege im Container**: Der App-Container läuft als
   Non-Root-User, das Dateisystem ist `read_only` (nur `/tmp` beschreibar via
   `tmpfs`), Ressourcenlimits (CPU/RAM) sind gesetzt.
@@ -187,6 +190,12 @@ nachträglich aufgesetzt:
   sind nur der Login-Flow selbst (`/auth/*`), statische Assets und
   `/healthz`. Kein selbstgebautes Passwort-Handling: Authentifizierung,
   Brute-Force-Schutz, Passwort-Reset laufen komplett über Keycloak.
+- **Rollen und Berechtigungen**: Die App prüft Berechtigungen serverseitig.
+  `reader` darf lesen; `editor` und `admin` dürfen zusätzlich Einrichtungen
+  anlegen, ändern und deaktivieren. E-Mail-Funktionen und -Historie stehen
+  allen drei Rollen mit `read_centers` offen. Der App-`admin` erhält keine
+  zusätzliche Benutzerverwaltung; Benutzerkonten und Gruppenzuordnungen werden
+  in Keycloak verwaltet.
 - **Fail-fast statt fail-open**: Ist `AUTH_ENABLED=true` (Default) gesetzt,
   aber OIDC nicht vollständig konfiguriert, **startet die App absichtlich
   gar nicht** – lieber ein sofort sichtbarer Fehler beim Start als eine
@@ -206,14 +215,16 @@ nachträglich aufgesetzt:
   wird per eigenem Klick geöffnet. Ob die Mail im Mailprogramm tatsächlich
   abgeschickt wurde, kann die Anwendung nicht feststellen – die Historie
   dokumentiert nur die Übergabe.
-- Der Login-Zustand liegt nur im signierten Session-Cookie, es gibt keinen
-  serverseitigen Session-Store. Ein einzelner Login lässt sich damit nicht
-  vorzeitig serverseitig widerrufen (nur über Keycloak selbst, „Sessions
-  beenden“ in der Admin-Konsole).
-- Es gibt noch keine Rollen-/Rechteprüfung – jeder erfolgreiche Keycloak-
-  Login hat vollen Zugriff auf alle Funktionen. Für ein reines
-  Beratungsstellen-Verzeichnis vertretbar, sollte aber vor produktivem
-  Einsatz mit sensibleren Daten überdacht werden.
+- Der Login-Zustand liegt nur im signierten Session-Cookie; einen
+  serverseitigen Session-Store gibt es nicht. Das Cookie hat eine Laufzeit
+  von 30 Minuten und wird bei Nutzung erneuert. Die App prüft die aktuelle
+  Keycloak-Sitzung oder den Kontostatus nicht bei jeder Anfrage erneut.
+  Deshalb widerruft das Beenden einer Keycloak-Sitzung oder Deaktivieren eines
+  Kontos ein bereits ausgestelltes App-Cookie nicht notwendigerweise sofort;
+  die lokale App-Abmeldung löscht das Cookie.
+- Die Berechtigungen sind rollenbasiert (siehe Abschnitt 5), aber die
+  Benutzerverwaltung ist nicht in der App aktiviert und erfolgt über die
+  Keycloak-Konsole.
 - Nutzerbezogene Zustände (z.B. „gemerkte Auswahl über Sessions hinweg“) gibt
   es noch nicht. Die Verzeichnisdaten selbst liegen persistent in PostgreSQL.
 
@@ -358,8 +369,11 @@ Realm-Import existiert:
      Personen, die Konten verwalten sollen, benötigen dafür eine separat und
      gezielt freigegebene Keycloak-Berechtigung im Realm `hfh-pflege`. Den
      globalen `master`-Admin nicht für den täglichen Betrieb verwenden.
-   - Rollenänderungen werden nach erneutem Login wirksam; die App-Sitzung kann
-     bis zu acht Stunden bestehen. Für sofortige Wirkung abmelden und erneut anmelden.
+   - Rollenänderungen werden nach Abmelden und erneutem Anmelden wirksam.
+     Keycloaks Sitzung ist auf 30 Minuten Leerlauf bzw. höchstens acht Stunden
+     begrenzt; das App-Cookie hat eine Laufzeit von 30 Minuten und wird bei
+     Nutzung erneuert. Die App gleicht Rollen und Keycloak-Sitzungsstatus nicht
+     laufend ab (siehe [Einschränkungen](#6-bekannte-einschränkungen-aktueller-stand)).
    - Konten deaktivieren: Benutzerkonto in Keycloak öffnen und *Enabled*
      ausschalten. Passwort zurücksetzen: *Credentials* → Passwort zurücksetzen;
      E-Mail-Reset funktioniert nur mit eingerichteter Keycloak-Mail-Konfiguration.
