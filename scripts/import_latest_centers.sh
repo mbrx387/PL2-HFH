@@ -14,13 +14,14 @@ cd "$PROJECT_DIR"
 
 LOG_DIR="${LOG_DIR:-/var/log/pl2-hfh}"
 LOG_FILE="$LOG_DIR/import-centers.log"
+LOCK_FILE="${LOCK_FILE:-/var/lock/pl2-hfh-import.lock}"
 mkdir -p "$LOG_DIR"
 exec >>"$LOG_FILE" 2>&1
 
 echo "=== $(date -u '+%Y-%m-%d %H:%M:%S') UTC import_latest_centers.sh ==="
 
 # Gegen Doppellaeufe (Cron + manueller Lauf gleichzeitig).
-exec 9>/var/lock/pl2-hfh-import.lock
+exec 9>"$LOCK_FILE"
 if ! flock -n 9; then
   echo "Laeuft bereits - abgebrochen."
   exit 0

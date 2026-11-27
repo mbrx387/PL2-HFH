@@ -63,6 +63,15 @@ def row(unsere_id, zqp_id="", name="Teststelle", adresse="Musterstr. 1", plz="01
     }
 
 
+# psycopg3 hat kein conn.notices (das war psycopg2) — NOTICEs laufen ueber einen
+# Notice-Handler; hier pro Verbindung sammeln.
+_NOTICES: dict[int, list[str]] = {}
+
+
+def notices_of(conn) -> list[str]:
+    return _NOTICES[id(conn)]
+
+
 @pytest.fixture
 def db():
     assert URL and "test" in URL.rsplit("/", 1)[-1], (
@@ -73,12 +82,16 @@ def db():
         admin.execute(f'CREATE SCHEMA "{schema}"')
     conn = psycopg.connect(URL, autocommit=True, row_factory=dict_row,
                            options=f"-c search_path={schema}")
+    notices: list[str] = []
+    _NOTICES[id(conn)] = notices
+    conn.add_notice_handler(lambda n: notices.append(n.message_primary or ""))
     try:
         for init_file in ("db/init/001_create_centers.sql", "db/init/003_manual_maintenance.sql"):
             conn.execute((ROOT / init_file).read_text(encoding="utf-8"))
         yield conn
     finally:
         conn.close()
+        _NOTICES.pop(id(conn), None)
         with psycopg.connect(URL, autocommit=True) as admin:
             admin.execute(f'DROP SCHEMA "{schema}" CASCADE')
 
@@ -132,7 +145,7 @@ def test_locked_entry_matched_by_id_is_untouched(db):
         "UPDATE centers SET manuell_gepflegt = true, name = 'Manuell',"
         " manuell_geaendert_von = 'mmustermann', manuell_geaendert_am = now() WHERE id = 10"
     )
-    db.notices.clear()
+    notices_of(db).clear()
 
     run_import(db, make_csv([row(10, zqp_id="ZQP1", name="Ueberschrieben", leistungen="Wohnberatung")]))
 
@@ -141,13 +154,13 @@ def test_locked_entry_matched_by_id_is_untouched(db):
     assert locked["manuell_gepflegt"] is True
     assert locked["manuell_geaendert_von"] == "mmustermann"  # Sperrvermerk nicht zurueckgesetzt
     assert service_names(db, 10) == {"Pflegeberatung"}  # Angebote unberuehrt
-    assert any("manuell gesperrt" in notice for notice in db.notices)
+    assert any("manuell gesperrt" in notice for notice in notices_of(db))
 
 
 def test_locked_entry_matched_by_zqp_id_with_other_id_is_skipped(db):
     run_import(db, make_csv([row(10, zqp_id="ZQP1", name="Alt")]))
     db.execute("UPDATE centers SET manuell_gepflegt = true WHERE id = 10")
-    db.notices.clear()
+    notices_of(db).clear()
 
     # Import-Zeile mit neuer ID, aber derselben zqp_id: darf weder einen zweiten
     # Datensatz anlegen noch die UNIQUE-Constraint auf zqp_id verletzen.
@@ -156,7 +169,7 @@ def test_locked_entry_matched_by_zqp_id_with_other_id_is_skipped(db):
     assert center(db, 55) is None
     assert center_count(db) == 1
     assert center(db, 10)["name"] == "Alt"
-    assert any("manuell gesperrt" in notice for notice in db.notices)
+    assert any("manuell gesperrt" in notice for notice in notices_of(db))
 
 
 def test_locked_manual_entry_without_zqp_id_matched_by_local_key_is_skipped(db):
@@ -166,7 +179,7 @@ def test_locked_manual_entry_without_zqp_id_matched_by_local_key_is_skipped(db):
         "INSERT INTO centers (id, zqp_id, name, adresse, plz, ort, bundesland, manuell_gepflegt)"
         " VALUES (1000000, NULL, 'Manuell X', 'Musterstr. 1', '01067', 'Dresden', 'SN', true)"
     )
-    db.notices.clear()
+    notices_of(db).clear()
 
     # Quelle liefert dieselbe reale Einrichtung (LOCAL-Key matcht, zqp_id leer).
     run_import(db, make_csv([row(77, zqp_id="", name="Manuell X", adresse="Musterstr. 1",
@@ -175,7 +188,7 @@ def test_locked_manual_entry_without_zqp_id_matched_by_local_key_is_skipped(db):
     assert center(db, 77) is None  # kein Duplikat
     assert center_count(db) == 1
     assert center(db, 1000000)["name"] == "Manuell X"
-    assert any("manuell gesperrt" in notice for notice in db.notices)
+    assert any("manuell gesperrt" in notice for notice in notices_of(db))
 
 
 def test_zqp_id_collision_with_unlocked_entry_rewrites_id(db):
