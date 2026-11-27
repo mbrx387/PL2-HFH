@@ -1,7 +1,6 @@
 # PL2-HFH – Pflegezentren-Finder
 
-Webanwendung zur Suche, Pflege und Kommunikation mit Pflege- und
-Beratungsstellen als Unterstützung pflegender Angehöriger.
+Entwicklung einer Datenbank zur Bedarfsermittlung pflegender Angehöriger.
 
 Die Anwendung bietet ein durchsuchbares und filterbares Verzeichnis von
 Pflege- und Beratungsstellen, rollenbasierte Datenpflege, eine Übersicht sowie
@@ -28,6 +27,10 @@ Den aktuellen Umsetzungsstand und geplante Arbeiten hält die
 | Containerisierung | **Docker Compose** (nicht Swarm/Kubernetes) | Ein Ubuntu-Server, überschaubare Last, kleines Team. Docker Compose deckt App, Reverse Proxy, Keycloak (Profil `sso`) und optionales Monitoring ab, ohne die Betriebskomplexität eines Cluster-Orchestrators. Migration zu Swarm/K8s bleibt möglich, ist aber aktuell nicht gerechtfertigt (siehe Abschnitt 4). |
 | Netzwerk-Exposition | **Nginx als TLS-Reverse-Proxy**, App-Container nur intern erreichbar | HTTPS-Terminierung, Security-Header, Rate-Limiting an einer zentralen Stelle statt in der Anwendung; die FastAPI-App selbst ist vom Host/Internet aus nicht direkt erreichbar. |
 | Login/SSO | **Aktiv**: OpenID Connect gegen **Keycloak** (`docker-compose`-Profil `sso`), erzwungen über eine App-Middleware | Kein selbstgebautes Login (Passwort-Handling, Brute-Force-Schutz etc. sind fehleranfällig) – ein etablierter Open-Source-IdP übernimmt das. Details/Betrieb siehe [Abschnitt 5](#5-sicherheitskonzept) und [Abschnitt 8](#8-server-inbetriebnahme). |
+
+Die ausführliche technische Bewertung der Datenhaltung (verglichene Optionen,
+Bewertungsmatrix, Schema-Entscheidung, Import-Weg) steht in
+[docs/TECHNISCHE_BEWERTUNG_DATENBANK.md](docs/TECHNISCHE_BEWERTUNG_DATENBANK.md) (Issue #29).
 
 ---
 
