@@ -39,6 +39,10 @@ class Center(Base):
     latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     aktiv: Mapped[bool] = mapped_column(default=True)
+    # Issue #85: Sperrvermerk gegen den woechentlichen Import (db/import_centers.sql).
+    manuell_gepflegt: Mapped[bool] = mapped_column(default=False)
+    manuell_geaendert_von: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    manuell_geaendert_am: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     quelle_updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

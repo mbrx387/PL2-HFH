@@ -81,11 +81,13 @@ erzwungen.
 
 Im GitHub-Workflow wird der Abruf nach dem ETL-Export auf `main` mit der
 aktuellen `GITHUB_RUN_ID` ausgeführt, damit genau das gerade erzeugte Artifact
-verwendet wird. Die bereitgestellte CSV wird zusätzlich als
-`pflegestellen-db-temp-*`-Artifact hochgeladen und 90 Tage aufbewahrt. Sie liegt
-damit nicht dauerhaft auf dem GitHub-Runner oder automatisch in einer
-Produktionsdatenbank. Der geplante Workflow startet samstags um 03:00 UTC
-(04:00 MEZ bzw. 05:00 MESZ).
+verwendet wird. Der Workflow lädt das Export-Artefakt `pflegestellen-<run_id>`
+hoch (90 Tage Aufbewahrung) und legt die CSV zusätzlich per SCP auf dem
+Deployment-Server unter `/opt/pl2-hfh/db/temp/pflegestellen.csv` ab. Sie gelangt
+damit nicht automatisch in eine Produktionsdatenbank: Den Import macht ein
+Server-Cron (`scripts/import_latest_centers.sh`, siehe Abschnitt "Automatischer
+Import in PostgreSQL"). Der geplante Workflow startet samstags um 02:00 UTC
+(03:00 MEZ bzw. 04:00 MESZ).
 
 ## Pipeline vor dem Merge
 
@@ -196,21 +198,44 @@ unverändert. PLZ und Telefonnummern bleiben Text. Details stehen in
 `GetDataFromAPI/postgresql_contract.json`.
 
 Nach erfolgreichem ETL-Lauf kopiert der Workflow die CSV auf `main` per SSH/SCP
-nach `/opt/pl2-hfh/db/temp/pflegestellen.csv` auf den Deployment-Server. Danach
-kopiert er sie in den Container `app-db:/tmp/pflegestellen.csv` und führt dort
-das versionierte SQL-Skript mit `psql -v ON_ERROR_STOP=1` aus. Der SQL-Import
-läuft transaktional: Datensätze mit bestehender `unsere_id` werden aktualisiert,
-neue IDs eingefügt und die Angebotszuordnungen der importierten Stellen ersetzt.
-Nicht in der CSV enthaltene Stellen werden nicht gelöscht.
+nach `/opt/pl2-hfh/db/temp/pflegestellen.csv` auf den Deployment-Server. Der
+Workflow importiert **nicht** mehr selbst in die Datenbank (Issue #85): Ein
+Cron-Job auf dem Server (`scripts/import_latest_centers.sh`, eingerichtet über
+`scripts/setup_import_cron.sh`, z. B. `0 6 * * 6` samstags 06:00 UTC) prüft per
+sha256-Marker (`db/temp/.last_imported`), ob die CSV neu ist, kopiert sie in den
+Container `app-db:/tmp/pflegestellen.csv` und führt dort das versionierte
+SQL-Skript mit `psql -v ON_ERROR_STOP=1` aus. Der Marker wird erst nach
+erfolgreichem Import geschrieben, damit ein fehlgeschlagener Lauf beim nächsten
+Cron-Lauf automatisch retried wird. Log: `/var/log/pl2-hfh/import-centers.log`.
+
+Der SQL-Import läuft transaktional: Datensätze mit bestehender `unsere_id`
+werden aktualisiert, neue IDs eingefügt und die Angebotszuordnungen der
+importierten Stellen ersetzt. Nicht in der CSV enthaltene Stellen werden nicht
+gelöscht. Zusätzlich (Issue #85, Sperrvermerk `manuell_gepflegt`):
+
+- Enthält die CSV eine `unsere_id >= 1.000.000` (manueller ID-Bereich), bricht
+  der Import mit `RAISE EXCEPTION` ab und rollt die Transaktion zurück. Die
+  ETL-Validierung (`validate_records()`) fängt solche CSVs bereits im
+  `validate`-Job des PRs ab, sodass das produktiv nicht vorkommt.
+- Import-Zeilen, die einen gesperrten Eintrag matchen (über `id`, `zqp_id` oder
+  den LOCAL-Key `name|adresse|plz|ort`), werden vor dem Upsert entfernt und per
+  `NOTICE` im Log gezählt: Gesperrte Einrichtungen werden weder überschrieben
+  noch dupliziert.
+- Kollidiert die `zqp_id` einer Import-Zeile mit einem **nicht** gesperrten
+  Eintrag unter anderer ID, wird `unsere_id` auf die bestehende ID umgebogen
+  (Update statt Duplikat/UNIQUE-Fehler).
 
 Voraussetzungen auf dem Server:
 - `/opt/pl2-hfh` enthält die aktuelle Version des Repositories einschließlich
-  `db/import_centers.sql`.
+  `db/import_centers.sql` und `scripts/import_latest_centers.sh`.
 - `docker compose` kennt den laufenden PostgreSQL-Service `app-db` mit Datenbank
-  `pflegedb`, Benutzer `pl2` und dem Schema aus `db/init/001_create_centers.sql`.
+  `pflegedb`, Benutzer `pl2` und dem Schema aus `db/init/` (inkl.
+  `003_manual_maintenance.sql` für die Sperrvermerk-Spalten).
 - GitHub Actions Secrets `SSH_HOST`, `SSH_USER` und `SSH_PRIVATE_KEY` sind wie
-  für den Deploy-Workflow eingerichtet; der SSH-Benutzer darf den Compose-Stack
-  bedienen.
+  für den Deploy-Workflow eingerichtet; der SSH-Benutzer darf per SCP nach
+  `/opt/pl2-hfh/db/temp/` schreiben.
+- Cron-Eintrag siehe `scripts/setup_import_cron.sh` (legt
+  `/etc/cron.d/pl2-hfh-import` an).
 
 Das SQL-Skript bricht bei einem Fehler ab; durch `ON_ERROR_STOP` schlägt dann
 auch der Workflow fehl. Die Actions-Datei `pflegestellen-db-temp-*` bleibt

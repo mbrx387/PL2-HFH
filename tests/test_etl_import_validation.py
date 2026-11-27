@@ -13,6 +13,7 @@ from GetDataFromAPI.pipeline import (
     merge_records,
     read_baseline,
     run,
+    validate_records,
     write_candidate,
 )
 from GetDataFromAPI.transform import convert_item, parse_contacts
@@ -358,3 +359,15 @@ def test_module_entrypoint_without_secret(tmp_path):
     assert result.returncode == 1
     assert "Traceback" not in result.stderr
     assert not (tmp_path / "out.csv").exists()
+
+
+def test_validate_records_rejects_manual_id_range():
+    # Issue #85: IDs ab 1.000.000 gehoeren manuell angelegten Einrichtungen und
+    # duerfen nie in die Import-CSV gelangen (SQL-Import wuerde komplett abbrechen).
+    record = baseline()[0]
+    record["unsere_id"] = 1000000
+    with pytest.raises(ImportFailure, match="manuellen Bereich"):
+        validate_records([record])
+    # Knapp darunter ist zulaessig.
+    record["unsere_id"] = 999999
+    validate_records([record])

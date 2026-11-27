@@ -79,12 +79,16 @@ PL2-HFH/
 ## 3. Datenquelle
 
 `app/data/pflegestellen.csv` ist ein versionierter Ausgangs-/Demo-Datensatz.
-Der wöchentliche ETL-Workflow importiert neue Daten transaktional mit
-`db/import_centers.sql` in die persistente PostgreSQL-Datenbank `app-db`.
-Die Web-App liest direkt aus denselben Tabellen; sie lädt oder überschreibt
-die Daten nicht beim Start. `unsere_id` wird als stabile `centers.id`
-übernommen. Das PostgreSQL-Volume `app-db-data` bleibt über Container-Neustarts
-erhalten.
+Der wöchentliche ETL-Workflow (`GetDataFromAPI`) legt die neue CSV per SCP auf
+dem Server ab; ein Server-Cron (`scripts/import_latest_centers.sh`) importiert
+sie transaktional mit `db/import_centers.sql` in die persistente
+PostgreSQL-Datenbank `app-db`. Manuell gepflegte Einrichtungen
+(`manuell_gepflegt`, Issue #85) werden dabei weder überschrieben noch
+dupliziert; IDs ab 1.000.000 sind manuellen Einträgen vorbehalten und brechen
+den Import ab, falls sie in der CSV auftauchen. Die Web-App liest direkt aus
+denselben Tabellen; sie lädt oder überschreibt die Daten nicht beim Start.
+`unsere_id` wird als stabile `centers.id` übernommen. Das PostgreSQL-Volume
+`app-db-data` bleibt über Container-Neustarts erhalten.
 
 ## 4. Hosting-Konzept
 
