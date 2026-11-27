@@ -93,6 +93,14 @@ def validate_records(records, *, require_name=True):
         except (KeyError, ValueError, TypeError):
             raise ImportFailure("Invalid existing ID / Ungueltige bestehende ID.") from None
         key = duplicate_key(record)
+        if identifier >= 1000000:
+            # Issue #85: IDs ab 1.000.000 gehoeren manuell angelegten Einrichtungen
+            # und duerfen nie in die Import-CSV gelangen (der SQL-Import bricht
+            # sonst komplett ab). Frühprüfung hier, damit der validate-Job des
+            # PRs fehlschlägt statt erst der Wochenlauf.
+            raise ImportFailure(
+                "ID im manuellen Bereich (>= 1000000) / ID in manual range (>= 1000000)."
+            )
         if identifier <= 0 or identifier in ids or key in keys:
             raise ImportFailure("Duplicate ID/key or missing name / Doppelte ID/Schluessel oder Name fehlt.")
         if require_name and not str(record.get("name", "")).strip():

@@ -25,6 +25,62 @@ CREATE TEMP TABLE centers_import (
 
 \copy centers_import FROM '/tmp/pflegestellen.csv' WITH (FORMAT csv, HEADER true, DELIMITER ';', ENCODING 'UTF8')
 
+-- Issue #85: Manuell gepflegte Datensaetze (Sperrvermerk manuell_gepflegt)
+-- duerfen vom Import weder veraendert noch dupliziert werden. Alle Kollisionen
+-- werden VOR dem Upsert aus der Temp-Tabelle aufgeloest, damit keine
+-- UNIQUE-Verletzung (zqp_id) den Import abbrechen laesst -- mit ON_ERROR_STOP
+-- rollt sonst die gesamte Transaktion zurueck.
+
+-- 0) Guard: IDs ab 1.000.000 gehoeren manuell angelegten Einrichtungen. Eine
+--    solche ID in der Import-CSV ist ein Fehler -> kompletter Abbruch. Feuert
+--    nie woechentlich: Der ETL-Guard in validate_records() (GetDataFromAPI)
+--    faengt solche CSVs schon im validate-Job des PRs ab.
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM centers_import WHERE btrim(unsere_id)::integer >= 1000000) THEN
+        RAISE EXCEPTION 'Import abgebrochen: unsere_id >= 1000000 in der CSV (manueller ID-Bereich)';
+    END IF;
+END $$;
+
+-- 1) Sperrfilter: Import-Zeilen, die einen gesperrten Eintrag matchen (ueber
+--    id, zqp_id ODER den LOCAL-Key name|adresse|plz|ort), werden entfernt.
+--    Felder und Angebote gesperrter Eintraege bleiben unberuehrt; die Anzahl
+--    landet per NOTICE im Log des Import-Schritts (Workflow- bzw. Server-Log).
+DO $$
+DECLARE
+    skipped integer;
+BEGIN
+    DELETE FROM centers_import AS ci
+    WHERE EXISTS (
+        SELECT 1
+        FROM centers AS c
+        WHERE c.manuell_gepflegt
+          AND (
+            c.id = btrim(ci.unsere_id)::integer
+            OR (btrim(ci.zqp_id) <> '' AND c.zqp_id = btrim(ci.zqp_id))
+            OR (
+                lower(btrim(c.name)) || '|' || lower(btrim(c.adresse)) || '|' || btrim(c.plz) || '|' || lower(btrim(c.ort))
+                =
+                lower(btrim(COALESCE(ci.name, ''))) || '|' || lower(btrim(COALESCE(ci.adresse, ''))) || '|' || btrim(COALESCE(ci.plz, '')) || '|' || lower(btrim(COALESCE(ci.ort, '')))
+            )
+          )
+    );
+    GET DIAGNOSTICS skipped = ROW_COUNT;
+    RAISE NOTICE 'Import uebersprungen (manuell gesperrt): %', skipped;
+END $$;
+
+-- 2) zqp_id-Kollision mit einem NICHT gesperrten Eintrag (andere ID): unsere_id
+--    auf die bestehende DB-ID umbiegen. Der Upsert aktualisiert dann denselben
+--    Datensatz, statt ein Duplikat anzulegen oder die UNIQUE-Constraint auf
+--    zqp_id zu verletzen.
+UPDATE centers_import AS ci
+SET unsere_id = c.id::text
+FROM centers AS c
+WHERE btrim(ci.zqp_id) <> ''
+  AND c.zqp_id = btrim(ci.zqp_id)
+  AND NOT c.manuell_gepflegt
+  AND c.id <> btrim(ci.unsere_id)::integer;
+
 INSERT INTO centers (
     id,
     zqp_id,

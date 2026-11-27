@@ -10,7 +10,8 @@ def test_create_center(page: Page):
 
     form = page.locator("#center-form")
     expect(page.locator("#center-form-title")).to_have_text("Einrichtung anlegen")
-    form.get_by_label("Kennnummer (ID) *").fill("1000001")
+    # Kein ID-Feld mehr: Die ID vergibt der Server automatisch (ab 1.000.000).
+    expect(form.get_by_label("Kennnummer (ID) *")).to_have_count(0)
     form.get_by_label("Name der Einrichtung *").fill("E2E Neue Beratungsstelle Hamburg")
     form.get_by_label("E-Mail-Adresse").fill("hamburg@e2e.example.org")
     form.get_by_label("Straße und Hausnummer").fill("Neuer Weg 7")
@@ -20,13 +21,14 @@ def test_create_center(page: Page):
     form.locator("#center-offers").get_by_label("Wohnberatung").check()
     form.get_by_role("button", name="Einrichtung speichern").click()
 
-    expect(page.locator("#center-form-message")).to_have_text("Einrichtung angelegt.")
+    expect(page.locator("#center-form-message")).to_contain_text("Einrichtung angelegt")
 
     # Serverseitig gespeichert ...
     data = page.request.get("/api/centers", params={"search": "Neue Beratungsstelle"}).json()
     assert data["total"] == 1
     created = data["items"][0]
-    assert created["id"] == 1000001
+    assert created["id"] >= 1_000_000  # Auto-ID aus dem manuellen Bereich
+    assert created["manuell_gepflegt"] is True  # Neuanlage ist import-gesperrt
     assert created["bundesland"] == "HH"
     assert created["wohnberatung"] is True
 
@@ -81,7 +83,6 @@ def test_invalid_postcode_is_rejected_without_request(page: Page):
     )
 
     page.get_by_role("button", name="+ Einrichtung hinzufügen").click()
-    page.get_by_label("Kennnummer (ID) *").fill("1000002")
     page.get_by_label("Name der Einrichtung *").fill("E2E Ungültige PLZ")
     page.get_by_label("Postleitzahl *").fill("123")
     page.get_by_label("Stadt / Gemeinde *").fill("Berlin")

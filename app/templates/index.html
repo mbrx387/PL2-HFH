@@ -215,16 +215,8 @@
                         </div>
 
                         <div class="editor-grid">
-                            <div class="form-field" id="center-id-field">
-                                <label for="center-id">Kennnummer (ID) *</label>
-                                <input id="center-id" name="id" type="number" min="1000000" step="1"
-                                       inputmode="numeric" placeholder="ab 1000000">
-                                <p class="field-help">
-                                    Manuell angelegte Einrichtungen bekommen eine ID ab 1.000.000,
-                                    damit sie nicht mit dem automatischen Datenimport kollidieren.
-                                </p>
-                            </div>
-
+                            <!-- Die ID vergibt der Server automatisch (ab 1.000.000), damit
+                                 manuelle Eintraege nicht mit dem automatischen Import kollidieren. -->
                             <div class="form-field">
                                 <label for="center-name">Name der Einrichtung *</label>
                                 <input id="center-name" name="name" required maxlength="200"

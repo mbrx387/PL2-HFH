@@ -16,6 +16,7 @@ from app.auth import router as auth_router
 from app.config import get_settings
 from app.database import engine
 from app.mail_models import ensure_mail_history_table
+from app.maintenance import ensure_manual_maintenance_columns
 from app.routers import centers, mail
 from app.security import SecurityHeadersMiddleware
 
@@ -71,6 +72,9 @@ async def lifespan(app: FastAPI):
     # fehlt. db/init/ wirkt bei bestehenden Volumes nicht mehr. Details:
     # app/mail_models.py und docs/AP5_EMAIL_HISTORY.md.
     ensure_mail_history_table(engine)
+    # Issue #85: Sperrvermerk-Spalten (manuell_gepflegt/-von/-am) in centers
+    # anlegen, falls sie fehlen (db/init/003 deckt nur frische Volumes ab).
+    ensure_manual_maintenance_columns(engine)
     logger.info("PostgreSQL-Verbindung und Schema sind bereit.")
     yield
     engine.dispose()

@@ -132,7 +132,7 @@
       "mapping": "updated_at → centers.quelle_updated_at; CSV YYYY-MM-DD HH:MM:SS. Bekannte Zeitzonen werden beim CSV-Export nach UTC umgerechnet; historische Werte ohne Zeitzone bleiben unverändert."
     }
   ],
-  "load_strategy": "Bestehendes db/import_centers.sql verwenden: text-Staging, centers-Upsert und Leistungszuordnungen in einer Transaktion; keine Löschung fehlender Einrichtungen.",
+  "load_strategy": "Bestehendes db/import_centers.sql verwenden: text-Staging, Guard gegen unsere_id >= 1000000, Sperrfilter auf manuell_gepflegt (id/zqp_id/LOCAL-Key) mit NOTICE, zqp_id-Normalisierung auf nicht gesperrte bestehende IDs, dann centers-Upsert und Leistungszuordnungen in einer Transaktion; keine Löschung fehlender Einrichtungen. Ausführung auf dem Server per scripts/import_latest_centers.sh (Cron), die CSV wird vom GetDataFromAPI-Workflow per SCP nach /opt/pl2-hfh/db/temp/ abgelegt.",
   "responsibility": "Datenbankimport, Zieltabellen und Benachrichtigung nach erfolgreichem Commit liegen beim Importverantwortlichen.",
   "import_script": "db/import_centers.sql (Branch gab_pflegedb)",
   "container_csv_path": "/tmp/pflegestellen.csv",

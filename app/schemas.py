@@ -1,4 +1,7 @@
 """Pydantic-Schemas fuer die API-Antworten (Validierung + OpenAPI-Doku)."""
+import re
+from datetime import datetime
+
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
@@ -6,6 +9,7 @@ class CenterOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
+    zqp_id: str | None = None
     name: str
     adresse: str
     plz: str
@@ -23,6 +27,11 @@ class CenterOut(BaseModel):
     angehoerigenberatung: bool
     betreuungsberatung: bool
     leistungen: str
+    aktiv: bool
+    # Issue #85: Sperrvermerk gegen den woechentlichen Import.
+    manuell_gepflegt: bool = False
+    manuell_geaendert_von: str | None = None
+    manuell_geaendert_am: datetime | None = None
 
 
 class CenterListResponse(BaseModel):
@@ -51,6 +60,10 @@ class CenterWrite(BaseModel):
         """Schreibt den Bundeslandcode vor der Speicherung in Großbuchstaben."""
         return value.upper()
 
-
-class CenterCreate(CenterWrite):
-    id: int = Field(gt=0)
+    @field_validator("website")
+    @classmethod
+    def validate_website(cls, value: str) -> str:
+        """Issue #85: serverseitige Pruefung - leer oder http(s):// (nicht nur im Browser)."""
+        if value and not re.match(r"^https?://", value, re.IGNORECASE):
+            raise ValueError("Website muss leer sein oder mit http:// bzw. https:// beginnen")
+        return value

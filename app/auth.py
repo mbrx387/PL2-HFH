@@ -109,7 +109,7 @@ def require_permission(permission: str):
             return {}
         user = request.session.get("user")
         if not has_permission(user, permission):
-            raise HTTPException(status_code=403, detail="Insufficient permissions")
+            raise HTTPException(status_code=403, detail="Keine ausreichende Berechtigung")
         return user
 
     return check_permission
@@ -192,6 +192,8 @@ async def callback(request: Request):
         "sub": userinfo.get("sub"),
         "email": userinfo.get("email"),
         "name": userinfo.get("name") or userinfo.get("preferred_username"),
+        # Issue #85: landet als manuell_geaendert_von im Sperrvermerk.
+        "preferred_username": userinfo.get("preferred_username"),
         "roles": extract_app_roles(userinfo),
     }
     # id_token wird fuer den vollstaendigen Logout (End-Session bei Keycloak,

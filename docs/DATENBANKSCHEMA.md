@@ -20,8 +20,10 @@ Das PostgreSQL-Docker-Image führt SQL-Dateien aus
 `/docker-entrypoint-initdb.d` automatisch nur aus, wenn das Datenbank-Volume
 zum ersten Mal mit einer leeren Datenbank initialisiert wird. Beim Start prüft die App die Verbindung und erwartet alle drei Tabellen.
 Sie legt das Schema aber nicht selbst an und importiert keine CSV-Datei
-automatisch. Einzige Ausnahme ist die AP5-Tabelle `mail_history` (siehe
-unten): Fehlt sie, legt die App nur diese eine Tabelle beim Start an.
+automatisch. Ausnahmen (jeweils nur wenn nötig, beim Start angelegt): die
+AP5-Tabelle `mail_history` (siehe unten) und die Sperrvermerk-Spalten aus
+`db/init/003_manual_maintenance.sql` (Issue #85, siehe
+[`app/maintenance.py`](../app/maintenance.py)).
 
 ## Tabellen
 
@@ -45,6 +47,9 @@ Eine Zeile entspricht einer Pflegestelle. `id` ist die stabile, interne ID;
 | `latitude` | `double precision` | Breitengrad; optional, falls gesetzt zwischen 47 und 56 |
 | `longitude` | `double precision` | Längengrad; optional, falls gesetzt zwischen 5 und 16 |
 | `aktiv` | `boolean` | Aktiv-Status; standardmäßig `true` |
+| `manuell_gepflegt` | `boolean` | Sperrvermerk gegen den Import (Issue #85); Standard `false` |
+| `manuell_geaendert_von` | `varchar(255)` | Login-Name (`preferred_username`) der letzten manuellen Änderung |
+| `manuell_geaendert_am` | `timestamptz` | Zeitpunkt der letzten manuellen Änderung |
 | `quelle_updated_at` | `timestamp` | Änderungszeitpunkt in der Quelldatei |
 | `created_at` | `timestamptz` | Zeitpunkt der Anlage; standardmäßig aktuelle Zeit |
 | `updated_at` | `timestamptz` | Zeitpunkt der Änderung; standardmäßig aktuelle Zeit |
@@ -172,20 +177,27 @@ ORDER BY c.id, s.name;
 ### Einzelnen Datensatz manuell eintragen
 
 Alternativ können einzelne Pflegestellen manuell eingetragen und mit
-vorhandenen Leistungen verknüpft werden:
+vorhandenen Leistungen verknüpft werden. Manuelle Einträge müssen eine ID
+**ab 1.000.000** verwenden (dieser Bereich gehört der Datenpflege; der Import
+bricht ab, falls eine CSV dort eine ID liefern würde). Beim Anlegen über die
+API (`POST /api/centers`) vergibt der Server die ID automatisch und setzt den
+Sperrvermerk; bei manuellem SQL-Eintrag entsprechend selbst setzen:
 
 ```sql
-INSERT INTO centers (id, name, plz, ort, bundesland)
-VALUES (100, 'Beratungsstelle Beispiel', '01067', 'Dresden', 'SN');
+INSERT INTO centers (id, name, plz, ort, bundesland, manuell_gepflegt)
+VALUES (1000000, 'Beratungsstelle Beispiel', '01067', 'Dresden', 'SN', true);
 
 INSERT INTO center_services (center_id, service_id)
-SELECT 100, id
+SELECT 1000000, id
 FROM services
 WHERE name IN ('Pflegeberatung', 'Wohnberatung');
 ```
 
 Die FastAPI-Anwendung liest zur Laufzeit direkt aus `app-db`. Beim Start prüft
 sie die Verbindung und das Schema; sie erstellt oder befüllt die Tabellen nicht
-selbst. Der ETL-Workflow importiert CSV-Daten mit vorhandener ID und ersetzt
-deren Angebotszuordnungen; Datensätze, die in der CSV fehlen, werden nicht
-automatisch gelöscht.
+selbst (Ausnahme: `mail_history` und die Sperrvermerk-Spalten aus
+`db/init/003_manual_maintenance.sql`, die sie anlegt, falls sie fehlen). Der
+Import (Server-Cron, siehe `docs/GetDataFromAPI.md`) spielt CSV-Daten mit
+vorhandener ID ein, ersetzt deren Angebotszuordnungen und **überspringt
+gesperrte Einträge vollständig**; Datensätze, die in der CSV fehlen, werden
+nicht automatisch gelöscht.

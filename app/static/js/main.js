@@ -559,7 +559,6 @@ function openCenterForm(center) {
   const isEdit = Boolean(center);
   $("center-form-title").textContent = isEdit ? "Einrichtung bearbeiten" : "Einrichtung anlegen";
   $("center-edit-id").value = isEdit ? String(center.id) : "";
-  $("center-id-field").hidden = isEdit;
   $("deactivate-center").hidden = !isEdit;
   $("etl-notice").hidden = !(isEdit && center.id < MANUAL_ID_START);
 
@@ -577,7 +576,7 @@ function openCenterForm(center) {
     });
   }
   showView("datenpflege");
-  (isEdit ? $("center-name") : $("center-id")).focus();
+  $("center-name").focus();
 }
 
 function extraServices(center) {
@@ -611,13 +610,8 @@ function collectPayload() {
   };
 }
 
-function validatePayload(payload, isEdit) {
-  if (!isEdit) {
-    const id = Number($("center-id").value);
-    if (!Number.isInteger(id) || id < MANUAL_ID_START) {
-      return `Bitte eine ganzzahlige ID ab ${MANUAL_ID_START.toLocaleString("de-DE")} angeben.`;
-    }
-  }
+function validatePayload(payload) {
+  // Die ID vergibt der Server (ab MANUAL_ID_START) — es gibt kein ID-Feld mehr.
   if (!payload.name) return "Bitte den Namen der Einrichtung angeben.";
   if (!/^\d{5}$/.test(payload.plz)) return "Die Postleitzahl muss aus genau 5 Ziffern bestehen.";
   if (!payload.ort) return "Bitte die Stadt oder Gemeinde angeben.";
@@ -633,7 +627,7 @@ async function saveCenter(event) {
   const message = $("center-form-message");
   const isEdit = Boolean(state.editing);
   const payload = collectPayload();
-  const problem = validatePayload(payload, isEdit);
+  const problem = validatePayload(payload);
   if (problem) {
     setMessage(message, problem, "error");
     return;
@@ -644,11 +638,11 @@ async function saveCenter(event) {
   try {
     if (isEdit) {
       await api(`/api/centers/${state.editing.id}`, { method: "PUT", body: JSON.stringify(payload) });
+      setMessage(message, "Änderungen gespeichert.", "success");
     } else {
-      payload.id = Number($("center-id").value);
-      await api("/api/centers", { method: "POST", body: JSON.stringify(payload) });
+      const created = await api("/api/centers", { method: "POST", body: JSON.stringify(payload) });
+      setMessage(message, `Einrichtung angelegt (ID ${created.id.toLocaleString("de-DE")}).`, "success");
     }
-    setMessage(message, isEdit ? "Änderungen gespeichert." : "Einrichtung angelegt.", "success");
     await loadCenters();
     loadDashboardCount();
   } catch (error) {

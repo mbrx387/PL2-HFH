@@ -143,12 +143,23 @@ def _center_payload(center_id=None):
 
 
 def test_create_center(client):
+    # Issue #85: Die ID vergibt der Server (ab 1.000.000), nicht der Client.
     response = client.post("/api/centers", json=_center_payload(40))
 
     assert response.status_code == 201
-    assert response.json()["id"] == 40
+    assert response.json()["id"] >= 1_000_000  # im manuellen ID-Bereich
     assert response.json()["bundesland"] == "SN"
     assert response.json()["leistungen"] == "Pflegeberatung"
+    assert response.json()["manuell_gepflegt"] is True  # Neuanlage ist import-gesperrt
+    assert response.json()["aktiv"] is True
+
+
+def test_create_center_assigns_distinct_auto_ids(client):
+    first = client.post("/api/centers", json=_center_payload()).json()
+    second = client.post("/api/centers", json=_center_payload()).json()
+
+    assert first["id"] != second["id"]
+    assert first["id"] >= 1_000_000 and second["id"] > first["id"]
 
 
 def test_create_center_rejects_unknown_service(client):
@@ -158,16 +169,23 @@ def test_create_center_rejects_unknown_service(client):
     assert client.post("/api/centers", json=payload).status_code == 422
 
 
-def test_create_center_conflicting_id_returns_conflict(client):
-    assert client.post("/api/centers", json=_center_payload(10)).status_code == 409
+def test_create_center_rejects_invalid_website_server_side(client):
+    # Issue #85: Website-Pruefung serverseitig, nicht nur im Browser.
+    payload = _center_payload()
+    payload["website"] = "example.org"
+
+    assert client.post("/api/centers", json=payload).status_code == 422
 
 
-def test_update_center_replaces_data_and_services(client):
+def test_update_center_replaces_data_and_services_and_sets_lock(client):
     response = client.put("/api/centers/10", json=_center_payload())
 
     assert response.status_code == 200
     assert response.json()["name"] == "Neue Beratungsstelle"
     assert response.json()["leistungen"] == "Pflegeberatung"
+    # Issue #85: manuelle Aenderung sperrt den Eintrag fuer den Import.
+    assert response.json()["manuell_gepflegt"] is True
+    assert response.json()["manuell_geaendert_am"] is not None
 
 
 def test_update_center_returns_not_found(client):
@@ -182,6 +200,33 @@ def test_delete_center(client):
     assert client.get("/api/bundeslaender").json() == ["SN"]
     assert client.put("/api/centers/30", json=_center_payload()).status_code == 200
     assert client.get("/api/centers").json()["total"] == 3
+
+
+def test_delete_center_sets_manual_lock_and_hides_from_default_list(client):
+    assert client.delete("/api/centers/30").status_code == 204
+
+    # Deaktivierte erscheinen nicht in der normalen Liste ...
+    assert [c["id"] for c in client.get("/api/centers").json()["items"]] == [10, 20]
+    # ... aber mit ?aktiv=false (ohne Login im Dev-Modus erlaubt) inklusive Sperrvermerk.
+    deactivated = client.get("/api/centers", params={"aktiv": "false"}).json()
+    assert [c["id"] for c in deactivated["items"]] == [30]
+    assert deactivated["items"][0]["aktiv"] is False
+    assert deactivated["items"][0]["manuell_gepflegt"] is True
+
+
+def test_manual_lock_can_be_removed(client):
+    assert client.put("/api/centers/10", json=_center_payload()).json()["manuell_gepflegt"] is True
+
+    assert client.delete("/api/centers/10/manual-lock").status_code == 204
+
+    items = {c["id"]: c for c in client.get("/api/centers").json()["items"]}
+    assert items[10]["manuell_gepflegt"] is False
+    # Historie (wer/wann) bleibt als manuell_geaendert_am sichtbar.
+    assert items[10]["manuell_geaendert_am"] is not None
+
+
+def test_manual_lock_unknown_center_returns_404(client):
+    assert client.delete("/api/centers/999/manual-lock").status_code == 404
 
 
 def test_write_endpoints_validate_payload(client):
@@ -224,3 +269,67 @@ def test_api_enforces_roles_after_oidc_login(make_app, monkeypatch, role, write_
         assert role_client.get("/auth/callback", follow_redirects=False).status_code == 307
         assert role_client.get("/api/centers").status_code == 200
         assert role_client.post("/api/centers", json=_center_payload(40)).status_code == write_status
+        # Issue #85: deaktivierte Einrichtungen nur fuer editor/admin sichtbar.
+        expected_aktiv_false = 200 if role in ("editor", "admin") else 403
+        assert role_client.get("/api/centers", params={"aktiv": "false"}).status_code == expected_aktiv_false
+
+
+@pytest.mark.parametrize(("role", "lock_status"), [("reader", 403), ("editor", 204), ("admin", 204)])
+def test_manual_lock_endpoint_enforces_write_role(make_app, monkeypatch, role, lock_status):
+    app = make_app(**OIDC_ENV)
+    from app.auth import oauth
+
+    async def authorize_access_token(request):
+        return {
+            "userinfo": {
+                "sub": "test-user",
+                "email": "test@example.org",
+                "preferred_username": "testuser",
+                "roles": [role],
+                "sid": "test-session-id",
+            },
+            "id_token": "test-id-token",
+        }
+
+    monkeypatch.setattr(oauth.keycloak, "authorize_access_token", authorize_access_token)
+
+    async def mock_validate_keycloak_session(user):
+        return bool(user.get("sub") and user.get("sid"))
+
+    monkeypatch.setattr("app.auth.validate_keycloak_session", mock_validate_keycloak_session)
+
+    with TestClient(app) as role_client:
+        assert role_client.get("/auth/callback", follow_redirects=False).status_code == 307
+        assert role_client.delete("/api/centers/10/manual-lock").status_code == lock_status
+
+
+def test_update_records_preferred_username_in_lock(make_app, monkeypatch):
+    app = make_app(**OIDC_ENV)
+    from app.auth import oauth
+
+    async def authorize_access_token(request):
+        return {
+            "userinfo": {
+                "sub": "test-user",
+                "email": "test@example.org",
+                "preferred_username": "mmustermann",
+                "roles": ["editor"],
+                "sid": "test-session-id",
+            },
+            "id_token": "test-id-token",
+        }
+
+    monkeypatch.setattr(oauth.keycloak, "authorize_access_token", authorize_access_token)
+
+    async def mock_validate_keycloak_session(user):
+        return bool(user.get("sub") and user.get("sid"))
+
+    monkeypatch.setattr("app.auth.validate_keycloak_session", mock_validate_keycloak_session)
+
+    with TestClient(app) as role_client:
+        assert role_client.get("/auth/callback", follow_redirects=False).status_code == 307
+        response = role_client.put("/api/centers/10", json=_center_payload())
+
+    assert response.status_code == 200
+    assert response.json()["manuell_gepflegt"] is True
+    assert response.json()["manuell_geaendert_von"] == "mmustermann"
