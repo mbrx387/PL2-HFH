@@ -4,15 +4,20 @@
 # neueste CSV, die der GetDataFromAPI-Workflow per scp nach /opt/pl2-hfh/db/temp
 # gelegt hat.
 #
-# Timing: Der GitHub-Actions-Lauf startet Samstag 02:00 UTC und hat ein Timeout
-# von 180 Minuten -> der Import-Cron laeuft Samstag 06:00 UTC. Dank Marker
-# (sha256 der CSV) ist der Lauf idempotent.
+# Timing: Der Import-Cron laeuft SONNTAG 02:00 UTC (Cron: 0 2 * * 0), also
+# Sonntag frueh. Grund: Der GitHub-Actions-Lauf ist zwar Samstag 02:00 UTC
+# eingeplant, startet aber wegen GitHub-Verzoegerung bei geplanten Runs erst
+# gegen 07:00-10:00 UTC und hat ein Timeout von 180 Minuten -> schlechtester
+# Fall: die CSV liegt erst Samstag ~13:00 UTC auf dem Server. Sonntag 02:00 UTC
+# gibt ~12h Puffer dazu. Dank Marker (sha256 der CSV) ist der Lauf idempotent:
+# Falls die Action einmal ausfaellt oder noch spaeter fertig wird, wird die
+# zuletzt vorhandene CSV importiert bzw. der Lauf uebersprungen.
 # Autor: Gabriel Pfuner (github.com/3mg4)
 set -Eeuo pipefail
 
 PROJECT_DIR="${PROJECT_DIR:-/opt/pl2-hfh}"
 CRON_FILE="/etc/cron.d/pl2-hfh-import"
-CRON_LINE="0 6 * * 6 root ${PROJECT_DIR}/scripts/import_latest_centers.sh"
+CRON_LINE="0 2 * * 0 root ${PROJECT_DIR}/scripts/import_latest_centers.sh"
 
 echo "Server-Zeitzone: $(date +%Z) ($(date))"
 echo "Hinweis: Die Cron-Zeile ist auf UTC ausgelegt (wie der Actions-Cron)."

@@ -63,15 +63,26 @@ sudo ./scripts/setup_import_cron.sh
 Standardmäßig legt es `/etc/cron.d/pl2-hfh-import` mit folgendem Eintrag an:
 
 ```cron
-0 6 * * 6 root /opt/pl2-hfh/scripts/import_latest_centers.sh
+0 2 * * 0 root /opt/pl2-hfh/scripts/import_latest_centers.sh
 ```
 
-Das ist für Samstag um 06:00 UTC vorgesehen. Cron verwendet die Zeitzone des
-Servers; daher vor dem Einrichten prüfen, ob der Server auf UTC läuft, oder
+Das ist für **Sonntag um 02:00 UTC** vorgesehen. Cron verwendet die Zeitzone
+des Servers; daher vor dem Einrichten prüfen, ob der Server auf UTC läuft, oder
 die Stunde im Eintrag anpassen. Ist bereits ein Eintrag für das Importskript
 vorhanden, lässt das Setup-Skript die Datei unverändert. Nach manuellen
 Änderungen an der Zeitzone oder am Projektpfad den Eintrag in
 `/etc/cron.d/pl2-hfh-import` kontrollieren.
+
+**Warum Sonntag 02:00 UTC und nicht Samstag kurz nach dem Actions-Lauf:** Der
+`GetDataFromAPI`-Workflow ist zwar Samstag 02:00 UTC eingeplant, GitHub startet
+geplante Workflows aber nur „best effort" und tatsächlich erst gegen
+07:00–10:00 UTC (beobachtet: Verzögerung von ~5–8 h, tendenziell steigend).
+Mit dem 180-Minuten-Timeout liegt die CSV im schlechtesten Fall erst Samstag
+~13:00 UTC auf dem Server. Sonntag 02:00 UTC bietet dazu ~12 h Puffer. Der
+SHA-256-Marker macht den Lauf idempotent: Falls die Action einmal ausfällt
+oder noch später fertig wird, wird die zuletzt vorhandene CSV importiert bzw.
+der Lauf übersprungen — es wird nie eine veraltete oder falsche Datei
+versehentlich erneut eingespielt.
 
 ## `backup_db.sh`
 
