@@ -7,6 +7,7 @@ Die PostgreSQL-spezifischen Pruefungen stehen in tests/test_mail_postgres.py.
 import json
 import re
 from base64 import b64encode
+from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 from urllib.parse import parse_qs, unquote, urlparse
@@ -402,3 +403,177 @@ def test_filter_selection_skips_inactive_centers(client):
     data = _prepare(client, filters={"bundesland": "TH"})
     assert data["selected_centers"] == 1
     assert data["recipient_count"] == 1
+
+
+# --- Versandbestaetigung: Datenbank (Wunsch Prof. Waage, 20.11.2026) --------
+
+
+def test_existing_table_from_first_version_gets_new_columns(client):
+    """Bestehende Datenbank mit der Tabelle aus PR #83: neue Spalten werden ergaenzt, Daten bleiben."""
+    from sqlalchemy import inspect
+
+    import app.database as database
+    from app.mail_models import ensure_mail_history_table
+
+    with database.engine.begin() as connection:
+        connection.exec_driver_sql("DROP TABLE mail_history")
+        # Spalten genau wie in der ersten Version (ohne Versandbestaetigung).
+        connection.exec_driver_sql(
+            "CREATE TABLE mail_history (id INTEGER PRIMARY KEY, handoff_id VARCHAR(32) NOT NULL UNIQUE,"
+            " campaign_id VARCHAR(32) NOT NULL, batch_number INTEGER NOT NULL,"
+            " batch_count INTEGER NOT NULL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,"
+            " created_by VARCHAR(255), subject VARCHAR(255) NOT NULL, body TEXT NOT NULL,"
+            " recipients JSON NOT NULL, recipient_count INTEGER NOT NULL, bundeslaender JSON NOT NULL,"
+            " status VARCHAR(32) NOT NULL DEFAULT 'handoff_attempted')"
+        )
+        connection.exec_driver_sql(
+            "INSERT INTO mail_history (handoff_id, campaign_id, batch_number, batch_count, subject,"
+            " body, recipients, recipient_count, bundeslaender)"
+            " VALUES ('a', 'c', 1, 1, 'Alter Eintrag', '', '[\"x@example.org\"]', 1, '[]')"
+        )
+
+    ensure_mail_history_table(database.engine)
+
+    columns = {column["name"] for column in inspect(database.engine).get_columns("mail_history")}
+    assert {"delivery_status", "delivery_confirmed_at", "delivery_confirmed_by"} <= columns
+    with database.engine.connect() as connection:
+        rows = connection.exec_driver_sql("SELECT subject, delivery_status FROM mail_history").all()
+    assert [tuple(row) for row in rows] == [("Alter Eintrag", None)]
+    assert client.get("/api/mail-history").json()["items"][0]["subject"] == "Alter Eintrag"
+    ensure_mail_history_table(database.engine)  # zweiter Start: nichts mehr zu tun
+
+
+# --- Versandbestaetigung (Wunsch Prof. Waage, 20.11.2026) ------------------
+
+
+def _handed_off_entry(client, subject="Bestaetigung", center_ids=(10,)):
+    token = _prepare(client, center_ids=list(center_ids), subject=subject)["batches"][0]["handoff_token"]
+    return _handoff(client, token).json()["history"]
+
+
+def test_new_entry_has_open_delivery_status(client):
+    entry = _handed_off_entry(client)
+    assert entry["status"] == "handoff_attempted"
+    assert entry["delivery_status"] is None
+    assert entry["delivery_confirmed_at"] is None
+
+
+def test_delivery_can_be_confirmed_rejected_and_reset(client):
+    entry = _handed_off_entry(client)
+    url = f"/api/mail-history/{entry['id']}/delivery"
+
+    sent = client.put(url, json={"delivery_status": "sent"}).json()
+    assert sent["delivery_status"] == "sent"
+    assert sent["delivery_confirmed_at"] is not None
+    assert sent["status"] == "handoff_attempted"  # technischer Status bleibt
+
+    not_sent = client.put(url, json={"delivery_status": "not_sent"}).json()
+    assert not_sent["delivery_status"] == "not_sent"
+
+    reset = client.put(url, json={"delivery_status": None}).json()
+    assert reset["delivery_status"] is None
+    assert reset["delivery_confirmed_at"] is None
+    assert reset["delivery_confirmed_by"] is None
+
+
+def test_history_can_be_filtered_by_delivery_status(client):
+    first = _handed_off_entry(client, "Erste")
+    second = _handed_off_entry(client, "Zweite")
+    client.put(f"/api/mail-history/{first['id']}/delivery", json={"delivery_status": "sent"})
+    client.put(f"/api/mail-history/{second['id']}/delivery", json={"delivery_status": "not_sent"})
+    third = _handed_off_entry(client, "Dritte")
+
+    def subjects(value):
+        items = client.get("/api/mail-history", params={"delivery": value}).json()["items"]
+        return [item["subject"] for item in items]
+
+    assert subjects("sent") == ["Erste"]
+    assert subjects("not_sent") == ["Zweite"]
+    assert subjects("open") == [third["subject"]]
+    assert client.get("/api/mail-history", params={"delivery": "unsinn"}).status_code == 422
+
+
+@pytest.mark.parametrize("body", [{}, {"delivery_status": "versendet"}, {"delivery_status": "sent", "x": 1}])
+def test_delivery_update_rejects_invalid_values(client, body):
+    entry = _handed_off_entry(client)
+    assert client.put(f"/api/mail-history/{entry['id']}/delivery", json=body).status_code == 422
+
+
+def test_delivery_update_for_unknown_entry_returns_404(client):
+    response = client.put("/api/mail-history/999999/delivery", json={"delivery_status": "sent"})
+    assert response.status_code == 404
+
+
+def test_delivery_confirmation_records_logged_in_user_and_requires_role(make_app, monkeypatch):
+    app = make_app(**OIDC_ENV)
+
+    # Wie in Inaaras Test: Keycloak-Sitzungspruefung nachbilden (ohne echten Keycloak).
+    async def mock_validate_keycloak_session(user):
+        return bool(user.get("sub") and user.get("sid"))
+
+    monkeypatch.setattr("app.auth.validate_keycloak_session", mock_validate_keycloak_session)
+
+    with TestClient(app) as client:
+        user = {"sub": "123", "email": "adrian@hfh.test", "roles": ["reader"], "sid": "test-session-id"}
+        client.cookies.set("session", _session_cookie("x" * 40, user))
+        entry = _handed_off_entry(client)
+        updated = client.put(
+            f"/api/mail-history/{entry['id']}/delivery", json={"delivery_status": "sent"}
+        ).json()
+        assert updated["delivery_confirmed_by"] == "adrian@hfh.test"
+
+        no_role = {"sub": "1", "roles": [], "sid": "test-session-id"}
+        client.cookies.set("session", _session_cookie("x" * 40, no_role))
+        denied = client.put(f"/api/mail-history/{entry['id']}/delivery", json={"delivery_status": None})
+        assert denied.status_code == 403
+
+
+# --- Dimensionen Zeit und Region (Detailanforderungen PL2) ------------------
+
+
+def _set_created_at(entry_id, when):
+    from sqlalchemy import update
+
+    import app.database as database
+
+    with database.engine.begin() as connection:
+        connection.execute(update(MailHistory).where(MailHistory.id == entry_id).values(created_at=when))
+
+
+def test_history_can_be_filtered_by_quarter_and_month(client):
+    for subject, when in (
+        ("Maerz", datetime(2026, 3, 31, 23, 59, tzinfo=UTC)),
+        ("April", datetime(2026, 4, 1, 0, 0, tzinfo=UTC)),
+        ("Dezember", datetime(2026, 12, 31, 12, 0, tzinfo=UTC)),
+    ):
+        _set_created_at(_handed_off_entry(client, subject)["id"], when)
+
+    def subjects(**params):
+        return [item["subject"] for item in client.get("/api/mail-history", params=params).json()["items"]]
+
+    assert subjects(year=2026, quarter=1) == ["Maerz"]
+    assert subjects(year=2026, quarter=2) == ["April"]
+    assert subjects(year=2026, quarter=4) == ["Dezember"]
+    assert subjects(year=2026, month=4) == ["April"]
+    assert subjects(year=2026) == ["Dezember", "April", "Maerz"]
+    assert subjects(year=2027) == []
+    for params in ({"quarter": 1}, {"year": 2026, "quarter": 5}, {"year": 2026, "quarter": 1, "month": 1}):
+        assert client.get("/api/mail-history", params=params).status_code == 422
+
+
+def test_history_can_be_filtered_by_region_and_sums_recipients(client):
+    _handed_off_entry(client, "Sachsen", center_ids=(10,))
+    _handed_off_entry(client, "Bayern", center_ids=(30,))
+    _handed_off_entry(client, "Beide", center_ids=(10, 30))
+
+    def history(**params):
+        return client.get("/api/mail-history", params=params).json()
+
+    assert [item["subject"] for item in history(bundesland="SN")["items"]] == ["Beide", "Sachsen"]
+    assert [item["subject"] for item in history(bundesland="by")["items"]] == ["Beide", "Bayern"]
+    assert history(bundesland="HB")["total"] == 0
+    assert history()["recipient_total"] == 4
+    assert history(bundesland="SN")["recipient_total"] == 3
+    assert history(bundesland="HB")["recipient_total"] == 0
+    for value in ("SN%", "S", "Sachsen"):
+        assert client.get("/api/mail-history", params={"bundesland": value}).status_code == 422

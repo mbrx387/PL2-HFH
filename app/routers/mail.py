@@ -7,7 +7,12 @@ Ablauf (jede BCC-Gruppe wird nur durch einen eigenen Klick geoeffnet):
                               NICHTS, liefert pro Gruppe ein signiertes Token.
 2. POST /api/mail/handoff   - Token pruefen, Historieneintrag schreiben, mailto:-Link
                               zurueckgeben. Der Browser oeffnet damit das Mailprogramm.
-3. GET  /api/mail-history   - Historie fuer Frontend/Dashboard (AP6).
+3. GET  /api/mail-history   - Historie fuer Frontend/Dashboard (AP6), filterbar nach
+                              Zeit (Jahr, Quartal, Monat), Region (Bundesland),
+                              Text und Versandstatus; liefert auch die Empfaenger-Summe.
+4. PUT  /api/mail-history/{id}/delivery
+                            - Versand von Hand bestaetigen oder verneinen
+                              (mailto: kann den Versand nicht selbst melden).
 
 GEÄNDERT AP6:
 Alle drei Endpunkte verlangen die Berechtigung read_centers.
@@ -15,11 +20,12 @@ Damit können Reader, Editor und Admin die Mailfunktionen nutzen.
 """
 
 from datetime import UTC, datetime
+from typing import Literal
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from itsdangerous import BadSignature, URLSafeTimedSerializer
-from sqlalchemy import func, or_, select
+from sqlalchemy import Text, cast, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -30,6 +36,7 @@ from app.auth import require_permission
 from app.database import get_db
 from app.mail_models import HANDOFF_STATUS, MailHistory
 from app.mail_schemas import (
+    MailDeliveryUpdate,
     MailHandoffRequest,
     MailHandoffResponse,
     MailHistoryListResponse,
@@ -229,22 +236,32 @@ def list_mail_history(
     offset: int = Query(default=0, ge=0),
     year: int | None = Query(default=None, ge=2000, le=2100, description="Kalenderjahr (UTC)"),
     month: int | None = Query(default=None, ge=1, le=12, description="Monat 1-12, nur mit year"),
+    quarter: int | None = Query(default=None, ge=1, le=4, description="Quartal 1-4, nur mit year"),
+    bundesland: str | None = Query(
+        default=None, pattern=r"^[A-Za-z]{2}$", description="Region: Laendercode, z. B. HB"
+    ),
     search: str | None = Query(default=None, max_length=200, description="Suche in Betreff/Nachricht"),
     campaign_id: str | None = Query(default=None, max_length=32),
+    delivery: Literal["open", "sent", "not_sent"] | None = Query(
+        default=None, description="Versandbestaetigung: open = noch nicht markiert"
+    ),
     # GEÄNDERT AP6: Reader, Editor und Admin dürfen die Historie einsehen.
     _: dict = Depends(require_permission("read_centers")),
 ):
-    """Historie, neueste zuerst. Fuer das AP6-Dashboard (Filter Jahr/Monat/Suche)."""
+    """Historie, neueste zuerst. Dimensionen Zeit (Jahr/Quartal/Monat) und Region (Bundesland)."""
     stmt = select(MailHistory)
-    if month is not None and year is None:
-        raise HTTPException(status_code=422, detail="month nur zusammen mit year verwenden.")
+    if (month is not None or quarter is not None) and year is None:
+        raise HTTPException(status_code=422, detail="month und quarter nur zusammen mit year verwenden.")
+    if month is not None and quarter is not None:
+        raise HTTPException(status_code=422, detail="Bitte entweder month oder quarter angeben.")
     if year is not None:
-        if month is None:
-            start, end = datetime(year, 1, 1, tzinfo=UTC), datetime(year + 1, 1, 1, tzinfo=UTC)
-        else:
-            start = datetime(year, month, 1, tzinfo=UTC)
-            end = datetime(year + (month == 12), month % 12 + 1, 1, tzinfo=UTC)
+        start, end = _time_range(year, month=month, quarter=quarter)
         stmt = stmt.where(MailHistory.created_at >= start, MailHistory.created_at < end)
+    if bundesland:
+        # bundeslaender ist eine JSON-Liste wie ["HB", "NI"]. Der Code ist per Pattern auf
+        # zwei Buchstaben begrenzt, daher ist der LIKE-Vergleich eindeutig und sicher.
+        code = bundesland.upper()
+        stmt = stmt.where(cast(MailHistory.bundeslaender, Text).like(f'%"{code}"%'))
     if search and search.strip():
         like = f"%{escape_like(search.strip())}%"
         stmt = stmt.where(
@@ -252,9 +269,63 @@ def list_mail_history(
         )
     if campaign_id:
         stmt = stmt.where(MailHistory.campaign_id == campaign_id)
+    if delivery == "open":
+        stmt = stmt.where(MailHistory.delivery_status.is_(None))
+    elif delivery:
+        stmt = stmt.where(MailHistory.delivery_status == delivery)
 
-    total = db.execute(select(func.count()).select_from(stmt.subquery())).scalar_one()
+    filtered = stmt.subquery()
+    total, recipient_total = db.execute(
+        select(func.count(), func.coalesce(func.sum(filtered.c.recipient_count), 0))
+    ).one()
     rows = db.execute(
         stmt.order_by(MailHistory.created_at.desc(), MailHistory.id.desc()).offset(offset).limit(limit)
     ).scalars().all()
-    return MailHistoryListResponse(total=total, items=[MailHistoryOut.model_validate(row) for row in rows])
+    return MailHistoryListResponse(
+        total=total,
+        recipient_total=recipient_total,
+        items=[MailHistoryOut.model_validate(row) for row in rows],
+    )
+
+
+def _time_range(year: int, *, month: int | None, quarter: int | None) -> tuple[datetime, datetime]:
+    """Beginn (inklusive) und Ende (exklusive) eines Jahres, Quartals oder Monats in UTC."""
+    if month is not None:
+        first, months = month, 1
+    elif quarter is not None:
+        first, months = 3 * quarter - 2, 3
+    else:
+        first, months = 1, 12
+    start = datetime(year, first, 1, tzinfo=UTC)
+    end_month = first + months
+    end = datetime(year + (end_month > 12), (end_month - 1) % 12 + 1, 1, tzinfo=UTC)
+    return start, end
+
+
+@router.put("/mail-history/{entry_id}/delivery", response_model=MailHistoryOut)
+def update_delivery_status(
+    entry_id: int,
+    payload: MailDeliveryUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+    # Dieselben Rollen, die E-Mails vorbereiten und uebergeben duerfen.
+    _: dict = Depends(require_permission("read_centers")),
+):
+    """Markiert von Hand, ob eine uebergebene BCC-E-Mail wirklich verschickt wurde.
+
+    Wunsch von Prof. Waage (20.11.2026): nachtraeglich sehen, was nicht
+    rausgegangen ist. Der technische Status "handoff_attempted" bleibt.
+    """
+    entry = db.get(MailHistory, entry_id)
+    if entry is None:
+        raise HTTPException(status_code=404, detail="Historieneintrag nicht gefunden.")
+    entry.delivery_status = payload.delivery_status
+    if payload.delivery_status is None:
+        entry.delivery_confirmed_at = None
+        entry.delivery_confirmed_by = None
+    else:
+        entry.delivery_confirmed_at = datetime.now(UTC)
+        entry.delivery_confirmed_by = _current_user(request)
+    db.commit()
+    db.refresh(entry)
+    return MailHistoryOut.model_validate(entry)

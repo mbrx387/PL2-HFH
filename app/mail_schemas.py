@@ -111,6 +111,18 @@ class MailHistoryOut(BaseModel):
     recipient_count: int
     bundeslaender: list[str]
     status: Literal["handoff_attempted"]
+    # Manuelle Versandbestaetigung (None = offen).
+    delivery_status: Literal["sent", "not_sent"] | None = None
+    delivery_confirmed_at: datetime | None = None
+    delivery_confirmed_by: str | None = None
+
+
+class MailDeliveryUpdate(BaseModel):
+    """Versand von Hand bestaetigen ("sent"), verneinen ("not_sent") oder zuruecksetzen (null)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    delivery_status: Literal["sent", "not_sent"] | None
 
 
 class MailHandoffResponse(BaseModel):
@@ -120,4 +132,6 @@ class MailHandoffResponse(BaseModel):
 
 class MailHistoryListResponse(BaseModel):
     total: int
+    # Summe der Empfaenger aller Eintraege im Filter (Historisierung inkl. Anzahl der Empfaenger).
+    recipient_total: int = 0
     items: list[MailHistoryOut]

@@ -29,7 +29,8 @@ Pflegestellen und ihre Leistungszuordnungen; manuell gesperrte Einträge werden
 `mail_history` speichert die Übergaben vorbereiteter BCC-E-Mails an das lokale
 Mailprogramm, damit die Übergaben später nachvollziehbar und auswertbar sind.
 Die Datenbank kann nicht feststellen, ob eine Person die E-Mail im Mailprogramm
-tatsächlich abgeschickt hat. Benutzerkonten und Anmeldedaten liegen nicht in
+tatsächlich abgeschickt hat; die Person kann den Versand aber nachträglich in
+der Versandhistorie bestätigen (`delivery_status`). Benutzerkonten und Anmeldedaten liegen nicht in
 `pflegedb`: Keycloak verwendet dafür einen eigenen Datenbankdienst.
 
 ## Zweck des Init-Skripts
@@ -175,6 +176,9 @@ Angelegt durch [`db/init/002_create_mail_history.sql`](../db/init/002_create_mai
 | `recipient_count` | `integer` | Anzahl der Adressen, 1 bis 20 |
 | `bundeslaender` | `json` | Ländercodes der Empfänger (Dimension Region) |
 | `status` | `varchar(32)` | Immer `handoff_attempted` (per CHECK abgesichert) |
+| `delivery_status` | `varchar(16)` | Manuelle Versandbestätigung: leer = offen, `sent` oder `not_sent` (per CHECK abgesichert) |
+| `delivery_confirmed_at` | `timestamptz` | Zeitpunkt der Markierung |
+| `delivery_confirmed_by` | `varchar(255)` | Person, die markiert hat |
 
 ## Datenbank starten und prüfen
 

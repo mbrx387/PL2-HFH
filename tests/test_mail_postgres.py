@@ -185,3 +185,76 @@ def test_database_rejects_rule_violations(schema, override):
         with engine.begin() as connection:
             connection.execute(MailHistory.__table__.insert().values(**values))
     engine.dispose()
+
+
+def _downgrade_to_first_version(engine) -> None:
+    """Stellt die Tabelle aus PR #83 nach (ohne Versandbestaetigung), mit einem Eintrag."""
+    with engine.begin() as connection:
+        connection.exec_driver_sql(
+            "ALTER TABLE mail_history DROP CONSTRAINT ck_mail_history_delivery_status,"
+            " DROP COLUMN delivery_status, DROP COLUMN delivery_confirmed_at,"
+            " DROP COLUMN delivery_confirmed_by"
+        )
+        connection.execute(
+            text(
+                "INSERT INTO mail_history (handoff_id, campaign_id, batch_number, batch_count,"
+                " subject, body, recipients, recipient_count, bundeslaender)"
+                " VALUES (:h, :c, 1, 1, 'Vor dem Update', '', '[\"a@example.org\"]', 1, '[]')"
+            ),
+            {"h": "b" * 32, "c": "c" * 32},
+        )
+
+
+def test_server_database_from_first_version_is_upgraded_in_place(schema):
+    """Wie auf dem Server nach PR #83: Tabelle existiert ohne neue Spalten."""
+    reference = f"{schema}_ref"
+    admin = create_engine(URL)
+    with admin.begin() as connection:
+        connection.exec_driver_sql(f'CREATE SCHEMA "{reference}"')
+    try:
+        ensure_mail_history_table(_engine(reference))  # Sollzustand
+
+        engine = _engine(schema)
+        ensure_mail_history_table(engine)
+        _downgrade_to_first_version(engine)
+        assert "delivery_status" not in {c["name"] for c in _describe_columns(engine, schema)}
+
+        # Mehrere Worker starten gleichzeitig mit der alten Tabelle.
+        engines = [_engine(schema) for _ in range(8)]
+        barrier = threading.Barrier(len(engines))
+        errors: list[Exception] = []
+
+        def start(worker_engine):
+            barrier.wait()
+            try:
+                ensure_mail_history_table(worker_engine)
+            except Exception as exc:  # noqa: BLE001
+                errors.append(exc)
+
+        threads = [threading.Thread(target=start, args=(e,)) for e in engines]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+        for worker_engine in engines:
+            worker_engine.dispose()
+        assert errors == []
+
+        assert _describe(engine, schema) == _describe(_engine(reference), reference)
+        with engine.connect() as connection:
+            row = connection.execute(text("SELECT subject, delivery_status FROM mail_history")).one()
+        assert row.subject == "Vor dem Update"
+        assert row.delivery_status is None
+        with pytest.raises(IntegrityError):
+            with engine.begin() as connection:
+                connection.exec_driver_sql("UPDATE mail_history SET delivery_status = 'vielleicht'")
+    finally:
+        with admin.begin() as connection:
+            connection.exec_driver_sql(f'DROP SCHEMA "{reference}" CASCADE')
+        admin.dispose()
+
+
+def _describe_columns(engine, schema_name):
+    from sqlalchemy import inspect as sa_inspect
+
+    return sa_inspect(engine).get_columns("mail_history", schema=schema_name)

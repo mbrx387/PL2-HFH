@@ -754,6 +754,109 @@ button:disabled {
   color: var(--text-muted);
 }
 
+/* NEU AP5: Filter, Details und Versandbestätigung in der Historie */
+.history-filters {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem 1rem;
+  align-items: end;
+}
+
+.history-filters .form-field {
+  margin-bottom: 0;
+}
+
+.history-filters .history-search {
+  grid-column: span 2;
+}
+
+.history-filter-actions {
+  grid-column: span 2;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.history-hint {
+  margin: 0.75rem 0 0.25rem;
+}
+
+.history-subject {
+  display: block;
+  font-weight: 600;
+}
+
+.history-meta {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.history-toggle {
+  margin-top: 0.3rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent-dark);
+  font: inherit;
+  font-size: 0.82rem;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.history-detail td {
+  background: var(--page-bg);
+}
+
+.history-detail-list {
+  display: grid;
+  grid-template-columns: minmax(140px, 200px) 1fr;
+  gap: 0.4rem 1rem;
+  margin: 0;
+}
+
+.history-detail-list dt {
+  font-weight: 600;
+}
+
+.history-detail-list dd {
+  margin: 0;
+}
+
+.history-message-text {
+  white-space: pre-wrap;
+}
+
+.history-recipients {
+  overflow-wrap: anywhere;
+  font-size: 0.85rem;
+}
+
+.history-more {
+  display: flex;
+  justify-content: center;
+  margin-top: 1rem;
+}
+
+.history-batch {
+  display: block;
+  margin-top: 0.3rem;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.history-actions {
+  white-space: nowrap;
+}
+
+.history-actions .secondary-button {
+  min-height: 32px;
+  padding: 0.3rem 0.65rem;
+  margin-right: 0.35rem;
+  font-size: 0.82rem;
+}
+
 /* ---------- Übersicht ---------- */
 
 .overview-grid {
@@ -829,6 +932,14 @@ button:disabled {
 @media (max-width: 900px) {
   .filter-grid {
     grid-template-columns: 1fr 1fr;
+  }
+
+  .history-filters {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .history-detail-list {
+    grid-template-columns: 1fr;
   }
 
   .filter-grid .search-field {

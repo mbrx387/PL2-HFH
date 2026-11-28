@@ -430,7 +430,7 @@ async function prepareEmail(event) {
           // WICHTIG: Die Historie dokumentiert nur die Übergabe, nicht den tatsächlichen Versand.
           setMessage(
             message,
-            "Übergabe protokolliert. Versand bitte im Mailprogramm bestätigen.",
+            "Übergabe protokolliert. Nach dem Senden bitte in der Versandhistorie als versendet markieren.",
             "success"
           );
 
@@ -466,63 +466,240 @@ function clearEmail() {
   setMessage($("email-form-message"), "");
 }
 
-// Die Versandhistorie aus PR#47 wird in der Tabelle und im Dashboard angezeigt.
-async function loadMailHistory() {
+// NEU AP5: Versandhistorie mit Filtern (Zeit, Region, Versand, Text), Details,
+// Versandbestätigung und "Weitere Einträge laden".
+const HISTORY_PAGE_SIZE = 50;
+const historyState = { loaded: 0, last: null, ticket: 0 };
+
+const DELIVERY_LABELS = {
+  sent: ["Versendet", "is-online"],
+  not_sent: ["Nicht versendet", "is-offline"],
+};
+
+function formatDateTime(value) {
+  return value ? new Date(value).toLocaleString("de-DE") : "";
+}
+
+function initHistoryFilters() {
+  const years = $("history-year");
+  const regions = $("history-region");
+  if (!years || !regions) return;
+  // Die Historie gibt es seit 2026; neuere Jahre kommen automatisch dazu.
+  for (let year = new Date().getFullYear(); year >= 2026; year--) {
+    const opt = el("option", null, String(year));
+    opt.value = String(year);
+    years.appendChild(opt);
+  }
+  const sorted = Object.entries(LAENDER).sort((a, b) => a[1].localeCompare(b[1], "de"));
+  for (const [code, name] of sorted) {
+    const opt = el("option", null, name);
+    opt.value = code;
+    regions.appendChild(opt);
+  }
+}
+
+// Baut die Abfrage für GET /api/mail-history aus den Filterfeldern.
+function historyQuery(extra = {}) {
+  const params = new URLSearchParams();
+  const year = $("history-year")?.value || "";
+  const period = $("history-period")?.value || "";
+  if (year) {
+    params.set("year", year);
+    if (period.startsWith("q")) params.set("quarter", period.slice(1));
+    if (period.startsWith("m")) params.set("month", period.slice(1));
+  }
+  const region = $("history-region")?.value || "";
+  if (region) params.set("bundesland", region);
+  const delivery = $("history-delivery-filter")?.value || "";
+  if (delivery) params.set("delivery", delivery);
+  const search = ($("history-search")?.value || "").trim();
+  if (search) params.set("search", search);
+  const filtered = [...params.keys()].length > 0;
+  for (const [key, value] of Object.entries(extra)) params.set(key, String(value));
+  return { params, filtered };
+}
+
+function deliveryCell(item) {
+  const cell = el("td");
+  const [label, cls] = DELIVERY_LABELS[item.delivery_status] || ["Übergeben – Versand offen", ""];
+  const pill = el("span", `status-pill ${cls}`.trim(), label);
+  pill.title = item.delivery_confirmed_by
+    ? `markiert von ${item.delivery_confirmed_by}`
+    : "An das Mailprogramm übergeben";
+  cell.appendChild(pill);
+  if (item.batch_count > 1) {
+    cell.appendChild(el("span", "history-batch", `Teil ${item.batch_number}/${item.batch_count}`));
+  }
+  return cell;
+}
+
+function deliveryText(item) {
+  if (!item.delivery_status) return "Noch nicht bestätigt";
+  const who = item.delivery_confirmed_by ? ` von ${item.delivery_confirmed_by}` : "";
+  return `${DELIVERY_LABELS[item.delivery_status][0]} – markiert am ${formatDateTime(item.delivery_confirmed_at)}${who}`;
+}
+
+// Detailzeile: dokumentiert Nachricht, Empfänger, Region, Person und Versand.
+function historyDetailRow(item) {
+  const row = el("tr", "history-detail");
+  row.id = `history-detail-${item.id}`;
+  row.hidden = true;
+  const cell = el("td");
+  cell.colSpan = 5;
+  const list = el("dl", "history-detail-list");
+  const add = (label, value, className) => {
+    list.appendChild(el("dt", null, label));
+    list.appendChild(el("dd", className, value));
+  };
+  add("Nachricht", item.body || "(kein Text)", "history-message-text");
+  add(`Empfänger im BCC (${item.recipient_count})`, item.recipients.join(", "), "history-recipients");
+  add("Bundesländer", item.bundeslaender.map(landName).join(", ") || "–");
+  add("Teil", `${item.batch_number} von ${item.batch_count}`);
+  add("Übergeben von", item.created_by || "– (ohne Anmeldung)");
+  add("Versand", deliveryText(item));
+  cell.appendChild(list);
+  row.appendChild(cell);
+  return row;
+}
+
+function deliveryActions(item, rows) {
+  const cell = el("td", "history-actions");
+  const choices = item.delivery_status
+    ? [[null, "Zurücksetzen"]]
+    : [["sent", "Versendet"], ["not_sent", "Nicht versendet"]];
+  for (const [value, label] of choices) {
+    const button = el("button", "secondary-button", label);
+    button.type = "button";
+    button.addEventListener("click", async () => {
+      button.disabled = true;
+      try {
+        const updated = await api(`/api/mail-history/${item.id}/delivery`, {
+          method: "PUT",
+          body: JSON.stringify({ delivery_status: value }),
+        });
+        if ($("history-delivery-filter")?.value) {
+          // Mit Versand-Filter passt der Eintrag evtl. nicht mehr: Liste neu laden.
+          await loadMailHistory();
+          return;
+        }
+        // Sonst nur diesen Eintrag austauschen (geöffnete Details bleiben offen).
+        const wasOpen = !rows.detail.hidden;
+        const fresh = historyRows(updated);
+        rows.row.replaceWith(fresh.row);
+        rows.detail.replaceWith(fresh.detail);
+        if (wasOpen) fresh.toggle.click();
+        await updateHistorySummary();
+      } catch (error) {
+        setMessage($("mail-history-message"), error.message, "error");
+        button.disabled = false;
+      }
+    });
+    cell.appendChild(button);
+  }
+  return cell;
+}
+
+function historyRows(item) {
+  const row = el("tr");
+  row.appendChild(el("td", null, formatDateTime(item.created_at)));
+
+  const subject = el("td");
+  subject.appendChild(el("span", "history-subject", item.subject));
+  if (item.bundeslaender.length) {
+    subject.appendChild(el("span", "history-meta", item.bundeslaender.map(landName).join(", ")));
+  }
+  const toggle = el("button", "history-toggle", "Details anzeigen");
+  toggle.type = "button";
+  toggle.setAttribute("aria-expanded", "false");
+  subject.appendChild(toggle);
+  row.appendChild(subject);
+
+  row.appendChild(el("td", null, String(item.recipient_count)));
+  row.appendChild(deliveryCell(item));
+
+  const detail = historyDetailRow(item);
+  toggle.setAttribute("aria-controls", detail.id);
+  toggle.addEventListener("click", () => {
+    const open = detail.hidden;
+    detail.hidden = !open;
+    toggle.setAttribute("aria-expanded", String(open));
+    toggle.textContent = open ? "Details ausblenden" : "Details anzeigen";
+  });
+
+  const rows = { row, detail, toggle };
+  row.appendChild(deliveryActions(item, rows));
+  return rows;
+}
+
+// Zusammenfassung über der Tabelle und Zahl im Dashboard (immer ohne Filter).
+async function updateHistorySummary() {
+  const last = historyState.last;
+  const all = await api("/api/mail-history?limit=1");
+  const open = await api("/api/mail-history?limit=1&delivery=open");
+  $("dashboard-history-count").textContent = String(all.total);
+  if (!last) return;
+  const scope = last.filtered ? "im Filter" : "insgesamt";
+  const entries = `${last.total} ${last.total === 1 ? "Übergabe" : "Übergaben"}`;
+  const people = `${last.recipientTotal} ${last.recipientTotal === 1 ? "Empfänger" : "Empfängern"}`;
+  setMessage(
+    $("mail-history-message"),
+    `${entries} ${scope} mit zusammen ${people}, ${historyState.loaded} angezeigt. ` +
+      `Noch nicht als versendet bestätigt: ${open.total}.`
+  );
+}
+
+// Die Versandhistorie (Backend aus PR#47) in der Tabelle und im Dashboard anzeigen.
+async function loadMailHistory(append = false) {
   const tbody = $("mail-history-body");
   const message = $("mail-history-message");
+  const more = $("history-more");
 
   if (!tbody || !message) return;
 
-  tbody.replaceChildren();
+  // Nur die zuletzt gestartete Abfrage darf die Tabelle füllen (schnelle Filterwechsel).
+  const ticket = ++historyState.ticket;
   setMessage(message, "Historie wird geladen ...");
+  if (more) more.disabled = true;
 
   try {
-    // Bis zu 50 dokumentierte Übergaben abrufen.
-    const data = await api("/api/mail-history?limit=50&offset=0");
-
-    // Gesamtzahl im Dashboard aktualisieren.
-    $("dashboard-history-count").textContent = String(data.total);
-
-    // Historientabelle mit API-Daten befüllen.
-    for (const item of data.items) {
-      const row = el("tr");
-
-      const values = [
-        new Date(item.created_at).toLocaleString("de-DE"),
-        item.subject,
-        item.recipient_count,
-        "An Mailprogramm übergeben",
-      ];
-
-      for (const value of values) {
-        row.appendChild(el("td", null, String(value)));
-      }
-
-      tbody.appendChild(row);
+    const offset = append ? historyState.loaded : 0;
+    const { params, filtered } = historyQuery({ limit: HISTORY_PAGE_SIZE, offset });
+    const data = await api(`/api/mail-history?${params}`);
+    if (ticket !== historyState.ticket) return;
+    if (!append) {
+      tbody.replaceChildren();
+      historyState.loaded = 0;
     }
 
-    // Hinweis bei leerer Historie anzeigen.
-    if (!data.items.length) {
-      const row = el("tr");
+    for (const item of data.items) {
+      const rows = historyRows(item);
+      tbody.append(rows.row, rows.detail);
+    }
+    historyState.loaded += data.items.length;
+    historyState.last = { total: data.total, recipientTotal: data.recipient_total, filtered };
 
+    // Hinweis bei leerer Historie anzeigen.
+    if (!historyState.loaded) {
+      const row = el("tr");
       const cell = el(
         "td",
         "empty-cell",
-        "Noch keine Übergaben dokumentiert."
+        filtered ? "Keine Einträge für diesen Filter." : "Noch keine Übergaben dokumentiert."
       );
-
-      cell.colSpan = 4;
+      cell.colSpan = 5;
       row.appendChild(cell);
       tbody.appendChild(row);
     }
 
-    setMessage(
-      message,
-      `${data.total} Übergaben dokumentiert (max. 50 angezeigt).`
-    );
-
+    if (more) {
+      more.hidden = historyState.loaded >= data.total;
+      more.disabled = false;
+    }
+    await updateHistorySummary();
   } catch (error) {
+    if (ticket !== historyState.ticket) return;
     $("dashboard-history-count").textContent = "–";
+    if (more) more.disabled = false;
 
     setMessage(
       message,
@@ -531,7 +708,6 @@ async function loadMailHistory() {
     );
   }
 }
-
 
 /* ------------------------------------------------------------------ */
 /* Datenpflege (nur editor/admin)                                      */
@@ -915,6 +1091,30 @@ function bindEvents() {
 
   // Das E-Mail-Formular nutzt die AP5-Backend-Anbindung.
   $("email-form").addEventListener("submit", prepareEmail);
+  // NEU AP5: Filter der Versandhistorie (Zeit, Region, Versand, Text) und "Weitere laden".
+  const historyForm = $("history-filter-form");
+  if (historyForm) {
+    initHistoryFilters();
+    historyForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      loadMailHistory();
+    });
+    $("history-year").addEventListener("change", () => {
+      const period = $("history-period");
+      period.disabled = !$("history-year").value;
+      if (period.disabled) period.value = "";
+      loadMailHistory();
+    });
+    for (const id of ["history-period", "history-region", "history-delivery-filter"]) {
+      $(id).addEventListener("change", () => loadMailHistory());
+    }
+    $("history-reset").addEventListener("click", () => {
+      historyForm.reset();
+      $("history-period").disabled = true;
+      loadMailHistory();
+    });
+    $("history-more").addEventListener("click", () => loadMailHistory(true));
+  }
   // Zurücksetzen-Funktion inklusive BCC-Gruppen verwenden.
   $("clear-email").addEventListener("click", clearEmail);
 
