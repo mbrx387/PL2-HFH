@@ -18,12 +18,14 @@ def test_search_by_city(page: Page):
 
 def test_filter_by_state_and_offer_then_reset(page: Page):
     open_directory(page)
+    # Nur im Suchbereich suchen: die Versandhistorie hat ebenfalls einen Filter "Bundesland".
+    search_form = page.get_by_role("region", name="Wonach suchen Sie?")
 
-    page.get_by_label("Bundesland", exact=True).select_option("BY")
+    search_form.get_by_label("Bundesland", exact=True).select_option("BY")
     expect(page.locator("#results-count")).to_contain_text("3 Einrichtungen gefunden")
     expect(card(page, "Sachsen")).to_have_count(0)
 
-    page.get_by_label("Angebot", exact=True).select_option("demenzberatung")
+    search_form.get_by_label("Angebot", exact=True).select_option("demenzberatung")
     cards = page.locator(".directory-card")
     expect(cards).to_have_count(1)
     expect(cards.first).to_contain_text("E2E Demenzberatung München")

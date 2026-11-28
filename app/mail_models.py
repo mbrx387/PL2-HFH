@@ -12,6 +12,11 @@ Die Tabelle wird auf zwei Wegen angelegt, die dasselbe Schema erzeugen
   PostgreSQL-Volumes (Docker fuehrt db/init/ nur beim ersten Start aus).
 - ensure_mail_history_table(): beim App-Start, damit auch eine BESTEHENDE
   Datenbank (z.B. auf dem Server) die Tabelle ohne manuellen Eingriff erhaelt.
+
+Versandbestaetigung (Wunsch Prof. Waage, 20.11.2026): Weil mailto: den Versand
+nicht melden kann, markiert die Person spaeter von Hand, ob die Gruppe
+tatsaechlich verschickt wurde ("sent") oder nicht ("not_sent"). Leer = offen.
+Der technische Status "handoff_attempted" bleibt davon unberuehrt.
 """
 
 from datetime import datetime
@@ -37,6 +42,7 @@ from app.database import Base
 
 HANDOFF_STATUS = "handoff_attempted"
 MAX_BCC_RECIPIENTS = 20
+DELIVERY_STATES = ("sent", "not_sent")
 
 # Feste, frei gewaehlte Nummer fuer die PostgreSQL-Advisory-Lock-Sperre beim
 # Anlegen der Tabelle (siehe ensure_mail_history_table).
@@ -55,6 +61,10 @@ class MailHistory(Base):
             "batch_number BETWEEN 1 AND batch_count", name="ck_mail_history_batch_number"
         ),
         CheckConstraint(f"status = '{HANDOFF_STATUS}'", name="ck_mail_history_status"),
+        CheckConstraint(
+            "delivery_status IS NULL OR delivery_status IN ('sent', 'not_sent')",
+            name="ck_mail_history_delivery_status",
+        ),
         Index("ix_mail_history_created_at", "created_at"),
         Index("ix_mail_history_campaign_id", "campaign_id"),
     )
@@ -82,6 +92,22 @@ class MailHistory(Base):
     status: Mapped[str] = mapped_column(
         String(32), nullable=False, server_default=text(f"'{HANDOFF_STATUS}'")
     )
+    # Manuelle Versandbestaetigung: NULL = offen, "sent" oder "not_sent".
+    delivery_status: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    delivery_confirmed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    delivery_confirmed_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+
+# Spalten, die nach der ersten Version (PR #83) dazugekommen sind. Fehlen sie in
+# einer bestehenden Tabelle, ergaenzt ensure_mail_history_table() sie automatisch.
+_ADDED_COLUMNS = {
+    "delivery_status": "VARCHAR(16)",
+    "delivery_confirmed_at": "TIMESTAMP WITH TIME ZONE",
+    "delivery_confirmed_by": "VARCHAR(255)",
+}
+_DELIVERY_CHECK = "ck_mail_history_delivery_status"
 
 
 def ensure_mail_history_table(engine: Engine) -> None:
@@ -99,6 +125,8 @@ def ensure_mail_history_table(engine: Engine) -> None:
             )
         MailHistory.__table__.create(bind=connection, checkfirst=True)
         existing = {column["name"] for column in inspect(connection).get_columns("mail_history")}
+        _add_new_columns(connection, existing)
+        existing = {column["name"] for column in inspect(connection).get_columns("mail_history")}
 
     missing = sorted(set(MailHistory.__table__.columns.keys()) - existing)
     if missing:
@@ -109,3 +137,28 @@ def ensure_mail_history_table(engine: Engine) -> None:
             + ", ".join(missing)
             + ". Siehe docs/AP5_EMAIL_HISTORY.md, Abschnitt Datenbank."
         )
+
+
+def _add_new_columns(connection, existing: set[str]) -> None:
+    """Ergaenzt nur die neuen, optionalen Spalten; bestehende Daten bleiben erhalten.
+
+    Laeuft nur, wenn die Kernspalten schon da sind (sonst greift oben der
+    Fail-fast-Fehler). Alle neuen Spalten sind optional (NULL), daher ist das
+    Ergaenzen auch bei vorhandenen Eintraegen gefahrlos.
+    """
+    core = set(MailHistory.__table__.columns.keys()) - set(_ADDED_COLUMNS)
+    if not core <= existing:
+        return
+    for name, sql_type in _ADDED_COLUMNS.items():
+        if name not in existing:
+            connection.exec_driver_sql(f"ALTER TABLE mail_history ADD COLUMN {name} {sql_type}")
+    if connection.dialect.name == "postgresql":
+        has_check = connection.execute(
+            text("SELECT 1 FROM pg_constraint WHERE conname = :name AND conrelid = 'mail_history'::regclass"),
+            {"name": _DELIVERY_CHECK},
+        ).first()
+        if not has_check:
+            connection.exec_driver_sql(
+                f"ALTER TABLE mail_history ADD CONSTRAINT {_DELIVERY_CHECK} "
+                "CHECK (delivery_status IS NULL OR delivery_status IN ('sent', 'not_sent'))"
+            )

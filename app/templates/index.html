@@ -394,8 +394,67 @@
                 </div>
 
                 <section class="directory-panel">
-                     <p id="mail-history-message" class="form-message" role="status" aria-live="polite">Historie wird geladen ...</p>
-
+                    <!-- NEU AP5: Filter nach Zeit (Jahr, Quartal, Monat), Region, Versandstatus und Text
+                         (Dimensionen aus den Detailanforderungen PL2). -->
+                    <form id="history-filter-form" class="history-filters" role="search" aria-label="Versandhistorie filtern">
+                        <div class="form-field">
+                            <label for="history-year">Jahr</label>
+                            <select id="history-year">
+                                <option value="">Alle Jahre</option>
+                            </select>
+                        </div>
+                        <div class="form-field">
+                            <label for="history-period">Zeitraum</label>
+                            <select id="history-period" disabled>
+                                <option value="">Ganzes Jahr</option>
+                                <optgroup label="Quartal">
+                                    <option value="q1">1. Quartal</option>
+                                    <option value="q2">2. Quartal</option>
+                                    <option value="q3">3. Quartal</option>
+                                    <option value="q4">4. Quartal</option>
+                                </optgroup>
+                                <optgroup label="Monat">
+                                    <option value="m1">Januar</option>
+                                    <option value="m2">Februar</option>
+                                    <option value="m3">März</option>
+                                    <option value="m4">April</option>
+                                    <option value="m5">Mai</option>
+                                    <option value="m6">Juni</option>
+                                    <option value="m7">Juli</option>
+                                    <option value="m8">August</option>
+                                    <option value="m9">September</option>
+                                    <option value="m10">Oktober</option>
+                                    <option value="m11">November</option>
+                                    <option value="m12">Dezember</option>
+                                </optgroup>
+                            </select>
+                        </div>
+                        <div class="form-field">
+                            <label for="history-region">Bundesland</label>
+                            <select id="history-region">
+                                <option value="">Alle Bundesländer</option>
+                            </select>
+                        </div>
+                        <div class="form-field">
+                            <label for="history-delivery-filter">Versand</label>
+                            <select id="history-delivery-filter">
+                                <option value="">Alle Einträge</option>
+                                <option value="open">Noch offen</option>
+                                <option value="sent">Versendet</option>
+                                <option value="not_sent">Nicht versendet</option>
+                            </select>
+                        </div>
+                        <div class="form-field history-search">
+                            <label for="history-search">Suche in Betreff und Nachricht</label>
+                            <input type="search" id="history-search" maxlength="200" placeholder="z. B. Umfrage">
+                        </div>
+                        <div class="history-filter-actions">
+                            <button type="submit" class="action-button">Suchen</button>
+                            <button type="button" class="secondary-button" id="history-reset">Filter zurücksetzen</button>
+                        </div>
+                    </form>
+                    <p class="field-help history-hint">Nach dem Senden im Mailprogramm hier bestätigen, ob die Nachricht wirklich rausgegangen ist. „Details“ zeigt Nachricht und Empfänger.</p>
+                    <p id="mail-history-message" class="form-message" role="status" aria-live="polite">Historie wird geladen ...</p>
 
                     <div class="table-wrapper">
                         <table class="history-table">
@@ -405,10 +464,14 @@
                                     <th scope="col">Betreff</th>
                                     <th scope="col">Empfänger</th>
                                     <th scope="col">Status</th>
+                                    <th scope="col">Versand bestätigen</th>
                                 </tr>
                             </thead>
                             <tbody id="mail-history-body"></tbody>
                         </table>
+                    </div>
+                    <div class="history-more">
+                        <button type="button" class="secondary-button" id="history-more" hidden>Weitere Einträge laden</button>
                     </div>
                 </section>
             </section>

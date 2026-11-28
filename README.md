@@ -217,7 +217,8 @@ ist, ist Sicherheit Teil der Architektur:
   höchstens 1.800 Zeichen Linklänge (`MAIL_MAX_MAILTO_LENGTH`); jede Gruppe
   wird per eigenem Klick geöffnet. Ob die Mail im Mailprogramm tatsächlich
   abgeschickt wurde, kann die Anwendung nicht feststellen – die Historie
-  dokumentiert nur die Übergabe.
+  dokumentiert die Übergabe. Den tatsächlichen Versand bestätigt die Person
+  danach in der Versandhistorie von Hand („Versendet“/„Nicht versendet“).
 - Der Login-Zustand liegt nur im signierten Session-Cookie; einen
   serverseitigen Session-Store gibt es nicht. Das Cookie hat eine Laufzeit
   von 30 Minuten und wird bei Nutzung erneuert. Die App prüft die aktuelle
